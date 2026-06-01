@@ -48,7 +48,8 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsup",
@@ -58,6 +59,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "pnpm run build",
     "smoke:browser": "node scripts/smoke-browser.mjs",
     "smoke:dist": "node -e \"import('./dist/index.js').then((mod) => { const exports = ['convertHeic', 'isHeic', 'detectHeic', 'getHeicInfo', 'HeicraftError', 'InvalidInputError', 'UnsupportedFormatError', 'ConversionError', 'AbortError']; for (const name of exports) { if (!(name in mod)) throw new Error('Missing export ' + name); } })\"",
     "test": "vitest run",
