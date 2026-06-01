@@ -1,0 +1,64 @@
+{
+  "name": "heicraft",
+  "version": "0.1.0",
+  "description": "Modern HEIC/HEIF conversion toolkit for JavaScript and TypeScript.",
+  "type": "module",
+  "license": "MIT",
+  "author": "",
+  "homepage": "https://github.com/ragnarok22/heicraft#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ragnarok22/heicraft.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ragnarok22/heicraft/issues"
+  },
+  "keywords": [
+    "heic",
+    "heif",
+    "jpeg",
+    "jpg",
+    "png",
+    "webp",
+    "convert",
+    "image",
+    "browser",
+    "node",
+    "typescript"
+  ],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist coverage",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "heic-decode": "^2.1.0",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsup": "^8.5.1",
+    "typescript": "^5.8.3",
+    "vitest": "^4.1.8"
+  },
+  "packageManager": "pnpm@11.5.0",
+  "engines": {
+    "node": ">=18.18"
+  }
+}

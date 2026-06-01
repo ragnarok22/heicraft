@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>heicraft browser example</title>
+  </head>
+  <body>
+    <input type="file" accept=".heic,.heif,image/heic,image/heif">
+    <img alt="Converted preview">
+
+    <script type="module">
+      import { convertHeic } from "heicraft";
+
+      const input = document.querySelector("input[type=file]");
+      const preview = document.querySelector("img");
+
+      input.addEventListener("change", async () => {
+        const file = input.files[0];
+        if (!file) {
+          return;
+        }
+
+        const result = await convertHeic(file, {
+          format: "jpeg",
+          quality: 0.9,
+        });
+
+        const url = URL.createObjectURL(result.data);
+        preview.src = url;
+      });
+    </script>
+  </body>
+</html>
