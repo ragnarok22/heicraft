@@ -18,6 +18,15 @@ export function createFtypBytes(
   return bytes;
 }
 
+export class CountingBlob extends Blob {
+  reads = 0;
+
+  override async arrayBuffer(): Promise<ArrayBuffer> {
+    this.reads += 1;
+    return super.arrayBuffer();
+  }
+}
+
 function writeUint32(bytes: Uint8Array, offset: number, value: number): void {
   bytes[offset] = (value >>> 24) & 0xff;
   bytes[offset + 1] = (value >>> 16) & 0xff;

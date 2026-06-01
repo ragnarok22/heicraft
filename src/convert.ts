@@ -5,7 +5,7 @@ import {
   throwIfAborted,
 } from "./errors";
 import { decodeHeic } from "./decoder";
-import { detectHeic } from "./detect";
+import { detectNormalizedHeic } from "./detect";
 import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput, OutputFormat } from "./types";
 import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
@@ -26,7 +26,7 @@ export async function convertHeic(
   assertNonEmptyInput(normalized.bytes);
   throwIfAborted(options.signal);
 
-  const detection = await detectHeic(input);
+  const detection = detectNormalizedHeic(normalized);
   if (!detection.isHeic) {
     throw new InvalidInputError();
   }

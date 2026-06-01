@@ -1,12 +1,12 @@
 import { ConversionError, InvalidInputError } from "./errors";
 import { decodeHeic } from "./decoder";
-import { detectHeic } from "./detect";
+import { detectNormalizedHeic } from "./detect";
 import type { HeicInfo, HeicInput } from "./types";
 import { normalizeInput } from "./utils/input";
 
 export async function getHeicInfo(input: HeicInput): Promise<HeicInfo> {
   const normalized = await normalizeInput(input);
-  const detection = await detectHeic(input);
+  const detection = detectNormalizedHeic(normalized);
 
   if (!detection.isHeic) {
     throw new InvalidInputError();

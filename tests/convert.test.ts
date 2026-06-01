@@ -9,7 +9,7 @@ import {
   InvalidInputError,
   UnsupportedFormatError,
 } from "../src";
-import { createFtypBytes } from "./helpers";
+import { CountingBlob, createFtypBytes } from "./helpers";
 
 describe("convertHeic", () => {
   afterEach(() => {
@@ -62,6 +62,15 @@ describe("convertHeic", () => {
     const blob = new Blob([createFtypBytes("heic")], { type: "image/heic" });
 
     await expect(convertHeic(blob)).rejects.toBeInstanceOf(ConversionError);
+  });
+
+  it("reads Blob input once before decoding", async () => {
+    mockDecoderFailure();
+    const blob = new CountingBlob([createFtypBytes("heic")], { type: "image/heic" });
+
+    await expect(convertHeic(blob)).rejects.toBeInstanceOf(ConversionError);
+
+    expect(blob.reads).toBe(1);
   });
 
   it("accepts Buffer-compatible input", async () => {

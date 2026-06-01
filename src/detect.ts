@@ -1,4 +1,4 @@
-import type { HeicDetectionResult, HeicInput } from "./types";
+import type { HeicDetectionResult, HeicInput, NormalizedInput } from "./types";
 import { normalizeInput } from "./utils/input";
 import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from "./utils/mime";
 
@@ -14,6 +14,11 @@ export async function isHeic(input: HeicInput): Promise<boolean> {
 
 export async function detectHeic(input: HeicInput): Promise<HeicDetectionResult> {
   const normalized = await normalizeInput(input);
+
+  return detectNormalizedHeic(normalized);
+}
+
+export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetectionResult {
   const brand = detectHeifBrand(normalized.bytes);
   const extension =
     getHeicExtension(normalized.filename) ?? getHeicExtensionFromMimeType(normalized.mimeType);

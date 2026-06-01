@@ -1,7 +1,7 @@
 import decode from "heic-decode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ConversionError, getHeicInfo, InvalidInputError } from "../src";
-import { createFtypBytes } from "./helpers";
+import { CountingBlob, createFtypBytes } from "./helpers";
 
 vi.mock("heic-decode", () => ({
   default: vi.fn(),
@@ -28,6 +28,22 @@ describe("getHeicInfo", () => {
       brand: "heic",
       hasAlpha: true,
     });
+  });
+
+  it("reads Blob input once before decoding", async () => {
+    decodeMock.mockResolvedValue({
+      width: 1,
+      height: 1,
+      data: new Uint8ClampedArray([255, 0, 0, 255]),
+    });
+    const blob = new CountingBlob([createFtypBytes("heic")], { type: "image/heic" });
+
+    await expect(getHeicInfo(blob)).resolves.toMatchObject({
+      width: 1,
+      height: 1,
+    });
+
+    expect(blob.reads).toBe(1);
   });
 
   it("rejects non-HEIC input", async () => {
