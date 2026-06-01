@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, test } from "vitest";
+import { afterEach, describe, expect, it, test, vi } from "vitest";
 import {
   AbortError,
   ConversionError,
@@ -12,6 +12,10 @@ import {
 import { createFtypBytes } from "./helpers";
 
 describe("convertHeic", () => {
+  afterEach(() => {
+    vi.doUnmock("heic-decode");
+  });
+
   it("rejects invalid quality values", async () => {
     await expect(convertHeic(new Uint8Array([1]), { quality: -0.1 })).rejects.toBeInstanceOf(
       InvalidInputError,
@@ -48,21 +52,31 @@ describe("convertHeic", () => {
   });
 
   it("wraps decoder failures in ConversionError", async () => {
+    mockDecoderFailure();
+
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toBeInstanceOf(ConversionError);
   });
 
   it("accepts Blob input for validation and detection", async () => {
+    mockDecoderFailure();
     const blob = new Blob([createFtypBytes("heic")], { type: "image/heic" });
 
     await expect(convertHeic(blob)).rejects.toBeInstanceOf(ConversionError);
   });
 
   it("accepts Buffer-compatible input", async () => {
+    mockDecoderFailure();
     const buffer = Buffer.from(createFtypBytes("heic"));
 
     await expect(convertHeic(buffer)).rejects.toBeInstanceOf(ConversionError);
   });
 });
+
+function mockDecoderFailure(): void {
+  vi.doMock("heic-decode", () => ({
+    default: vi.fn().mockRejectedValue(new Error("decode failed")),
+  }));
+}
 
 const fixtureUrl = new URL("./fixtures/photo.heic", import.meta.url);
 const fixturePath = fileURLToPath(fixtureUrl);
