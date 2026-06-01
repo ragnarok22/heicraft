@@ -8,9 +8,9 @@ All notable changes to this project will be documented in this file.
 
 - Added GitHub Actions workflows for CI and release publishing.
 - Added format, lint, typecheck, coverage, package dry-run, and dist smoke-check scripts.
-- Added coverage thresholds for the MVP test suite.
+- Added 90% global coverage thresholds for the MVP test suite.
 - Added project support documents: `CONTRIBUTING.md`, `SECURITY.md`, and `THIRD_PARTY_NOTICES.md`.
-- Added additional `getHeicInfo` tests with decoder mocking.
+- Added additional `convertHeic`, `getHeicInfo`, input utility, and MIME utility tests with backend mocking where appropriate.
 
 ### Changed
 
