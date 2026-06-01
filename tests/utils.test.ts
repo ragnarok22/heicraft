@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { InvalidInputError } from "../src";
 import { assertNonEmptyInput, normalizeInput } from "../src/utils/input";
@@ -24,6 +25,12 @@ describe("input utilities", () => {
     await expect(normalizeInput(buffer)).resolves.toEqual({ bytes: new Uint8Array([1, 2, 3]) });
   });
 
+  it("normalizes cross-realm ArrayBuffer input", async () => {
+    const buffer = vm.runInNewContext("new Uint8Array([1, 2, 3]).buffer") as ArrayBuffer;
+
+    await expect(normalizeInput(buffer)).resolves.toEqual({ bytes: new Uint8Array([1, 2, 3]) });
+  });
+
   it("normalizes Node.js file path input", async () => {
     const directory = await mkdtemp(join(tmpdir(), "heicraft-input-"));
     const filePath = join(directory, "photo.heic");
@@ -43,6 +50,12 @@ describe("input utilities", () => {
   it("rejects empty Node.js file paths and empty bytes", async () => {
     await expect(normalizeInput(" ")).rejects.toBeInstanceOf(InvalidInputError);
     expect(() => assertNonEmptyInput(new Uint8Array())).toThrow(InvalidInputError);
+  });
+
+  it("wraps unreadable Node.js file paths", async () => {
+    const filePath = join(tmpdir(), `heicraft-missing-${Date.now()}.heic`);
+
+    await expect(normalizeInput(filePath)).rejects.toBeInstanceOf(InvalidInputError);
   });
 });
 

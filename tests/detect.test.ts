@@ -35,6 +35,16 @@ describe("detectHeic", () => {
     });
   });
 
+  it("rejects malformed ftyp boxes instead of scanning past the box", async () => {
+    const bytes = createFtypBytes("isom", ["heic"]);
+    bytes[3] = 8;
+
+    await expect(detectHeic(bytes)).resolves.toMatchObject({
+      isHeic: false,
+      brand: undefined,
+    });
+  });
+
   it("uses MIME fallback when signature data is inconclusive", async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/heic" });
     const result = await detectHeic(blob);

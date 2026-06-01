@@ -20,7 +20,7 @@ export async function normalizeInput(input: HeicInput): Promise<NormalizedInput>
     };
   }
 
-  if (input instanceof ArrayBuffer) {
+  if (isArrayBuffer(input)) {
     return { bytes: new Uint8Array(input) };
   }
 
@@ -45,7 +45,12 @@ async function normalizeFilePath(filePath: string): Promise<NormalizedInput> {
   }
 
   const { readFile } = await import("node:fs/promises");
-  const bytes = await readFile(filePath);
+  let bytes: Uint8Array;
+  try {
+    bytes = await readFile(filePath);
+  } catch {
+    throw new InvalidInputError(`Unable to read input file: ${filePath}`);
+  }
   const filename = filePath.split(/[\\/]/).at(-1);
 
   return {
@@ -58,4 +63,8 @@ export function assertNonEmptyInput(bytes: Uint8Array): void {
   if (bytes.byteLength === 0) {
     throw new InvalidInputError("Input must not be empty.");
   }
+}
+
+function isArrayBuffer(input: unknown): input is ArrayBuffer {
+  return Object.prototype.toString.call(input) === "[object ArrayBuffer]";
 }

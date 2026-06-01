@@ -50,6 +50,12 @@ describe("getHeicInfo", () => {
     await expect(getHeicInfo(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(InvalidInputError);
   });
 
+  it("rejects empty HEIC-looking input", async () => {
+    const file = new File([], "empty.heic", { type: "image/heic" });
+
+    await expect(getHeicInfo(file)).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
   it("returns detection metadata when signature-detected decoding fails", async () => {
     decodeMock.mockRejectedValue(new Error("decode failed"));
 

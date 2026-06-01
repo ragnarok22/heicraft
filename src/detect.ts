@@ -38,12 +38,16 @@ export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetection
 }
 
 export function detectHeifBrand(bytes: Uint8Array): string | undefined {
-  if (bytes.byteLength < 12 || readAscii(bytes, 4, 8) !== "ftyp") {
+  if (bytes.byteLength < 16 || readAscii(bytes, 4, 8) !== "ftyp") {
     return undefined;
   }
 
   const boxSize = readUint32(bytes, 0);
-  const boxEnd = boxSize >= 12 ? Math.min(boxSize, bytes.byteLength) : bytes.byteLength;
+  if (boxSize !== 0 && boxSize < 16) {
+    return undefined;
+  }
+
+  const boxEnd = boxSize === 0 ? bytes.byteLength : Math.min(boxSize, bytes.byteLength);
   const brands: string[] = [readAscii(bytes, 8, 12)];
 
   for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {

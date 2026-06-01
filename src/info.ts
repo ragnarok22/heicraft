@@ -2,10 +2,11 @@ import { ConversionError, InvalidInputError } from "./errors";
 import { decodeHeic } from "./decoder";
 import { detectNormalizedHeic } from "./detect";
 import type { HeicInfo, HeicInput } from "./types";
-import { normalizeInput } from "./utils/input";
+import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 
 export async function getHeicInfo(input: HeicInput): Promise<HeicInfo> {
   const normalized = await normalizeInput(input);
+  assertNonEmptyInput(normalized.bytes);
   const detection = detectNormalizedHeic(normalized);
 
   if (!detection.isHeic) {
