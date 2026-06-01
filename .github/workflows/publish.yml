@@ -67,6 +67,11 @@ jobs:
         run: |
           node -e "const tagVersion = '${{ steps.version.outputs.VERSION }}'; const packageVersion = require('./package.json').version; if (tagVersion !== packageVersion) { throw new Error(`Tag version ${tagVersion} does not match package version ${packageVersion}`); }"
 
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -78,8 +83,3 @@ jobs:
             See the [changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
           draft: false
           prerelease: false
-
-      - name: Publish to npm with provenance
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
