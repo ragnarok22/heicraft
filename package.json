@@ -33,6 +33,10 @@
       "import": "./dist/index.js"
     }
   },
+  "browser": {
+    "node:fs/promises": "./dist/browser/fs-promises.js",
+    "sharp": "./dist/browser/sharp.js"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -54,6 +58,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "pack:check": "npm pack --dry-run",
+    "smoke:browser": "node scripts/smoke-browser.mjs",
     "smoke:dist": "node -e \"import('./dist/index.js').then((mod) => { const exports = ['convertHeic', 'isHeic', 'detectHeic', 'getHeicInfo', 'HeicraftError', 'InvalidInputError', 'UnsupportedFormatError', 'ConversionError', 'AbortError']; for (const name of exports) { if (!(name in mod)) throw new Error('Missing export ' + name); } })\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
@@ -68,6 +73,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3",
+    "vite": "^8.0.14",
     "vitest": "^4.1.8"
   },
   "packageManager": "pnpm@11.5.0",

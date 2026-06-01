@@ -53,5 +53,8 @@ jobs:
       - name: Smoke test package exports
         run: pnpm run smoke:dist
 
+      - name: Smoke test browser bundle
+        run: pnpm run smoke:browser
+
       - name: Check package contents
         run: pnpm run pack:check

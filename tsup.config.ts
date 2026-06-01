@@ -1,7 +1,11 @@
 import { defineConfig } from "tsup";
 
 export default defineConfig({
-  entry: ["src/index.ts"],
+  entry: {
+    index: "src/index.ts",
+    "browser/fs-promises": "src/browser/fs-promises.ts",
+    "browser/sharp": "src/browser/sharp.ts",
+  },
   format: ["esm"],
   target: "es2022",
   dts: true,
