@@ -44,6 +44,8 @@
   "scripts": {
     "build": "tsup",
     "clean": "rm -rf dist coverage",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -52,6 +54,7 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
     "@types/node": "^22.15.29",
     "tsup": "^8.5.1",
     "typescript": "^5.8.3",
