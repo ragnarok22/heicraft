@@ -44,6 +44,12 @@ jobs:
       - name: Build project
         run: pnpm run build
 
+      - name: Smoke test package exports
+        run: pnpm run smoke:dist
+
+      - name: Check package contents
+        run: pnpm run pack:check
+
       - name: Run tests
         run: pnpm test
 

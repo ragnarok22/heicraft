@@ -1,6 +1,6 @@
 {
   "name": "heicraft",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Modern HEIC/HEIF conversion toolkit for JavaScript and TypeScript.",
   "type": "module",
   "license": "MIT",
@@ -39,7 +39,9 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "publishConfig": {
     "access": "public"
@@ -51,6 +53,8 @@
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint .",
+    "pack:check": "npm pack --dry-run",
+    "smoke:dist": "node -e \"import('./dist/index.js').then((mod) => { const exports = ['convertHeic', 'isHeic', 'detectHeic', 'getHeicInfo', 'HeicraftError', 'InvalidInputError', 'UnsupportedFormatError', 'ConversionError', 'AbortError']; for (const name of exports) { if (!(name in mod)) throw new Error('Missing export ' + name); } })\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

@@ -56,6 +56,10 @@ const result = await convertHeic(input, {
   quality: 0.85,
 });
 
+if (!(result.data instanceof Uint8Array)) {
+  throw new Error("Expected Uint8Array output in Node.js.");
+}
+
 await writeFile("./photo.webp", result.data);
 ```
 
@@ -227,6 +231,8 @@ The initial HEIC decoder backend is [`heic-decode`](https://www.npmjs.com/packag
 
 Node.js output encoding uses [`sharp`](https://www.npmjs.com/package/sharp). Browser output encoding uses the platform canvas API.
 
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for dependency licensing notes.
+
 ## Licensing Notes
 
 - `heicraft` wrapper/source code is MIT licensed.
@@ -237,6 +243,15 @@ Node.js output encoding uses [`sharp`](https://www.npmjs.com/package/sharp). Bro
 - Third-party license notices are not hidden, renamed, bundled away, or obscured by this package.
 - Users should review dependency licenses before using this package in commercial or closed-source products.
 - This section is informational and is not legal advice.
+
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for more detail.
+
+## Project Documents
+
+- [Changelog](./CHANGELOG.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Security Policy](./SECURITY.md)
+- [Third-Party Notices](./THIRD_PARTY_NOTICES.md)
 
 ## License
 
