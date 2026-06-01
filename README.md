@@ -5,6 +5,7 @@
 [![license](https://img.shields.io/npm/l/heicraft.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-ready-3178c6.svg)](https://www.typescriptlang.org/)
 [![coverage](https://img.shields.io/badge/coverage-v8-4c1.svg)](https://vitest.dev/guide/coverage)
+[![bundle size](https://img.shields.io/bundlephobia/minzip/heicraft.svg)](https://bundlephobia.com/package/heicraft)
 [![Node.js](https://img.shields.io/node/v/heicraft.svg)](./package.json)
 
 Modern HEIC/HEIF conversion toolkit for JavaScript and TypeScript.
