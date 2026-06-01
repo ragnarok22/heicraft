@@ -2,14 +2,26 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, test } from "vitest";
-import { AbortError, ConversionError, convertHeic, InvalidInputError, UnsupportedFormatError } from "../src";
+import {
+  AbortError,
+  ConversionError,
+  convertHeic,
+  InvalidInputError,
+  UnsupportedFormatError,
+} from "../src";
 import { createFtypBytes } from "./helpers";
 
 describe("convertHeic", () => {
   it("rejects invalid quality values", async () => {
-    await expect(convertHeic(new Uint8Array([1]), { quality: -0.1 })).rejects.toBeInstanceOf(InvalidInputError);
-    await expect(convertHeic(new Uint8Array([1]), { quality: 1.1 })).rejects.toBeInstanceOf(InvalidInputError);
-    await expect(convertHeic(new Uint8Array([1]), { quality: Number.NaN })).rejects.toBeInstanceOf(InvalidInputError);
+    await expect(convertHeic(new Uint8Array([1]), { quality: -0.1 })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    );
+    await expect(convertHeic(new Uint8Array([1]), { quality: 1.1 })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    );
+    await expect(convertHeic(new Uint8Array([1]), { quality: Number.NaN })).rejects.toBeInstanceOf(
+      InvalidInputError,
+    );
   });
 
   it("rejects unsupported output formats", async () => {
@@ -26,7 +38,9 @@ describe("convertHeic", () => {
     const controller = new AbortController();
     controller.abort();
 
-    await expect(convertHeic(createFtypBytes("heic"), { signal: controller.signal })).rejects.toBeInstanceOf(AbortError);
+    await expect(
+      convertHeic(createFtypBytes("heic"), { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(AbortError);
   });
 
   it("rejects non-HEIC input", async () => {
@@ -54,15 +68,18 @@ const fixtureUrl = new URL("./fixtures/photo.heic", import.meta.url);
 const fixturePath = fileURLToPath(fixtureUrl);
 const runFixtureTest = existsSync(fixturePath) ? test : test.skip;
 
-runFixtureTest("converts a real HEIC fixture when tests/fixtures/photo.heic is present", async () => {
-  const input = await readFile(fixturePath);
-  const result = await convertHeic(input, { format: "jpeg", quality: 0.9 });
+runFixtureTest(
+  "converts a real HEIC fixture when tests/fixtures/photo.heic is present",
+  async () => {
+    const input = await readFile(fixturePath);
+    const result = await convertHeic(input, { format: "jpeg", quality: 0.9 });
 
-  expect(result.format).toBe("jpeg");
-  expect(result.mimeType).toBe("image/jpeg");
-  expect(result.data).toBeInstanceOf(Uint8Array);
-  if (!(result.data instanceof Uint8Array)) {
-    throw new Error("Expected Node.js conversion to return Uint8Array data.");
-  }
-  expect(result.data.byteLength).toBeGreaterThan(0);
-});
+    expect(result.format).toBe("jpeg");
+    expect(result.mimeType).toBe("image/jpeg");
+    expect(result.data).toBeInstanceOf(Uint8Array);
+    if (!(result.data instanceof Uint8Array)) {
+      throw new Error("Expected Node.js conversion to return Uint8Array data.");
+    }
+    expect(result.data.byteLength).toBeGreaterThan(0);
+  },
+);

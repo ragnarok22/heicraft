@@ -20,7 +20,10 @@ export function getOutputMimeType(format: OutputFormat): string {
   return outputMimeTypes[format];
 }
 
-export function getHeicMimeType(brand?: string, extension?: HeicExtension): HeicMimeType | undefined {
+export function getHeicMimeType(
+  brand?: string,
+  extension?: HeicExtension,
+): HeicMimeType | undefined {
   if (brand && heicBrands.has(brand)) {
     return "image/heic";
   }

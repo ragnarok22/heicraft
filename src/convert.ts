@@ -1,4 +1,9 @@
-import { ConversionError, InvalidInputError, UnsupportedFormatError, throwIfAborted } from "./errors";
+import {
+  ConversionError,
+  InvalidInputError,
+  UnsupportedFormatError,
+  throwIfAborted,
+} from "./errors";
 import { decodeHeic } from "./decoder";
 import { detectHeic } from "./detect";
 import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput, OutputFormat } from "./types";
@@ -6,7 +11,10 @@ import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 import { assertOutputFormat, getOutputMimeType, normalizeQuality } from "./utils/mime";
 
-export async function convertHeic(input: HeicInput, options: ConvertOptions = {}): Promise<ConvertResult> {
+export async function convertHeic(
+  input: HeicInput,
+  options: ConvertOptions = {},
+): Promise<ConvertResult> {
   throwIfAborted(options.signal);
 
   const format = options.format ?? "jpeg";
@@ -28,7 +36,9 @@ export async function convertHeic(input: HeicInput, options: ConvertOptions = {}
   try {
     decoded = await decodeHeic(normalized.bytes);
   } catch (error) {
-    throw new ConversionError(error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.");
+    throw new ConversionError(
+      error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.",
+    );
   }
   throwIfAborted(options.signal);
 
@@ -56,7 +66,11 @@ function assertQuality(quality?: number): void {
   }
 }
 
-async function encodeInNode(decoded: DecodedImage, format: OutputFormat, quality: number): Promise<Uint8Array> {
+async function encodeInNode(
+  decoded: DecodedImage,
+  format: OutputFormat,
+  quality: number,
+): Promise<Uint8Array> {
   try {
     const sharpModule = await import("sharp");
     const sharp = sharpModule.default;
@@ -68,15 +82,18 @@ async function encodeInNode(decoded: DecodedImage, format: OutputFormat, quality
       },
     });
 
-    const output = format === "jpeg"
-      ? await image.jpeg({ quality: normalizeQuality(quality) }).toBuffer()
-      : format === "webp"
-        ? await image.webp({ quality: normalizeQuality(quality) }).toBuffer()
-        : await image.png().toBuffer();
+    const output =
+      format === "jpeg"
+        ? await image.jpeg({ quality: normalizeQuality(quality) }).toBuffer()
+        : format === "webp"
+          ? await image.webp({ quality: normalizeQuality(quality) }).toBuffer()
+          : await image.png().toBuffer();
 
     return new Uint8Array(output.buffer, output.byteOffset, output.byteLength);
   } catch (error) {
-    throw new ConversionError(error instanceof Error ? error.message : "Conversion failed while encoding image.");
+    throw new ConversionError(
+      error instanceof Error ? error.message : "Conversion failed while encoding image.",
+    );
   }
 }
 
@@ -99,7 +116,11 @@ async function encodeInBrowser(
     throw new ConversionError("Conversion failed while creating a canvas context.");
   }
 
-  const imageData = new ImageData(new Uint8ClampedArray(decoded.data), decoded.width, decoded.height);
+  const imageData = new ImageData(
+    new Uint8ClampedArray(decoded.data),
+    decoded.width,
+    decoded.height,
+  );
   context.putImageData(imageData, 0, 0);
 
   const blob = await new Promise<Blob | null>((resolve) => {

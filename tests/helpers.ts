@@ -1,4 +1,7 @@
-export function createFtypBytes(majorBrand = "heic", compatibleBrands: string[] = []): Uint8Array<ArrayBuffer> {
+export function createFtypBytes(
+  majorBrand = "heic",
+  compatibleBrands: string[] = [],
+): Uint8Array<ArrayBuffer> {
   const brands = [majorBrand, "0000", ...compatibleBrands];
   const size = 8 + brands.length * 4;
   const bytes = new Uint8Array(size);

@@ -30,7 +30,9 @@ export async function normalizeInput(input: HeicInput): Promise<NormalizedInput>
     };
   }
 
-  throw new InvalidInputError("Input must be a File, Blob, ArrayBuffer, Uint8Array, Buffer, or Node.js file path.");
+  throw new InvalidInputError(
+    "Input must be a File, Blob, ArrayBuffer, Uint8Array, Buffer, or Node.js file path.",
+  );
 }
 
 async function normalizeFilePath(filePath: string): Promise<NormalizedInput> {

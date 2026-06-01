@@ -15,11 +15,17 @@ export async function isHeic(input: HeicInput): Promise<boolean> {
 export async function detectHeic(input: HeicInput): Promise<HeicDetectionResult> {
   const normalized = await normalizeInput(input);
   const brand = detectHeifBrand(normalized.bytes);
-  const extension = getHeicExtension(normalized.filename) ?? getHeicExtensionFromMimeType(normalized.mimeType);
+  const extension =
+    getHeicExtension(normalized.filename) ?? getHeicExtensionFromMimeType(normalized.mimeType);
   const mimeType = getHeicMimeType(brand, extension);
 
   return {
-    isHeic: Boolean(brand || extension || normalized.mimeType === "image/heic" || normalized.mimeType === "image/heif"),
+    isHeic: Boolean(
+      brand ||
+        extension ||
+        normalized.mimeType === "image/heic" ||
+        normalized.mimeType === "image/heif",
+    ),
     brand,
     mimeType,
     extension,
@@ -44,10 +50,10 @@ export function detectHeifBrand(bytes: Uint8Array): string | undefined {
 
 function readUint32(bytes: Uint8Array, offset: number): number {
   return (
-    bytes[offset]! * 0x1000000 +
-    bytes[offset + 1]! * 0x10000 +
-    bytes[offset + 2]! * 0x100 +
-    bytes[offset + 3]!
+    (bytes[offset] ?? 0) * 0x1000000 +
+    (bytes[offset + 1] ?? 0) * 0x10000 +
+    (bytes[offset + 2] ?? 0) * 0x100 +
+    (bytes[offset + 3] ?? 0)
   );
 }
 
