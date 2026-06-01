@@ -139,6 +139,17 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it("rejects browser output when canvas falls back to a different MIME type", async () => {
+    mockBrowserEnvironment();
+    mockDecoderAndSharp(Buffer.from([]));
+    mockCanvas({ blob: new Blob([new Uint8Array([1])], { type: "image/png" }) });
+    const { convertHeic } = await importBrowserConvert();
+
+    await expect(convertHeic(createFtypBytes("heic"), { format: "webp" })).rejects.toMatchObject({
+      code: "UNSUPPORTED_FORMAT",
+    });
+  });
+
   it("wraps browser canvas encoding failures", async () => {
     mockBrowserEnvironment();
     mockDecoderAndSharp(Buffer.from([]));

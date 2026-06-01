@@ -135,5 +135,19 @@ async function encodeInBrowser(
     throw new ConversionError("Conversion failed while encoding image in the browser.");
   }
 
+  assertBrowserOutputMimeType(blob, format, mimeType);
+
   return blob;
+}
+
+function assertBrowserOutputMimeType(blob: Blob, format: OutputFormat, mimeType: string): void {
+  if (!blob.type || blob.type === mimeType) {
+    return;
+  }
+
+  if (format === "webp") {
+    throw new UnsupportedFormatError("WebP output is not supported in this environment.");
+  }
+
+  throw new ConversionError(`Expected browser encoder to return ${mimeType}, got ${blob.type}.`);
 }
