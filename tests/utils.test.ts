@@ -25,6 +25,16 @@ describe("input utilities", () => {
     await expect(normalizeInput(buffer)).resolves.toEqual({ bytes: new Uint8Array([1, 2, 3]) });
   });
 
+  it("normalizes a Blob without MIME metadata", async () => {
+    const blob = new Blob([new Uint8Array([1, 2, 3])]);
+
+    await expect(normalizeInput(blob)).resolves.toEqual({
+      bytes: new Uint8Array([1, 2, 3]),
+      filename: undefined,
+      mimeType: undefined,
+    });
+  });
+
   it("normalizes cross-realm ArrayBuffer input", async () => {
     const buffer = vm.runInNewContext("new Uint8Array([1, 2, 3]).buffer") as ArrayBuffer;
 
