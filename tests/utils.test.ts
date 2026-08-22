@@ -35,6 +35,19 @@ describe("input utilities", () => {
     });
   });
 
+  it("wraps Blob read failures", async () => {
+    class FailingBlob extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        return Promise.reject(new Error("read failed"));
+      }
+    }
+
+    await expect(normalizeInput(new FailingBlob())).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: "Unable to read Blob input.",
+    });
+  });
+
   it("normalizes cross-realm ArrayBuffer input", async () => {
     const buffer = vm.runInNewContext("new Uint8Array([1, 2, 3]).buffer") as ArrayBuffer;
 
@@ -95,6 +108,7 @@ describe("MIME utilities", () => {
   });
 
   it("normalizes quality for encoders", () => {
+    expect(normalizeQuality(0)).toBe(1);
     expect(normalizeQuality(0.925)).toBe(93);
   });
 });

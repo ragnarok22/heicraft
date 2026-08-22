@@ -12,7 +12,12 @@ export async function normalizeInput(input: HeicInput): Promise<NormalizedInput>
   }
 
   if (isBlobLike(input)) {
-    const bytes = new Uint8Array(await input.arrayBuffer());
+    let bytes: Uint8Array;
+    try {
+      bytes = new Uint8Array(await input.arrayBuffer());
+    } catch {
+      throw new InvalidInputError("Unable to read Blob input.");
+    }
     return {
       bytes,
       filename: isFileLike(input) ? input.name : undefined,

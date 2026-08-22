@@ -49,6 +49,31 @@ describe("detectHeic", () => {
     });
   });
 
+  it("rejects truncated ftyp boxes", async () => {
+    const bytes = createFtypBytes("heic");
+    bytes[3] = bytes.byteLength + 4;
+
+    await expect(detectHeic(bytes)).resolves.toMatchObject({
+      isHeic: false,
+      brand: undefined,
+    });
+  });
+
+  it("supports extended-size ftyp boxes", async () => {
+    const regularBox = createFtypBytes("heix");
+    const bytes = new Uint8Array(regularBox.byteLength + 8);
+    bytes.set([0, 0, 0, 1], 0);
+    bytes.set(regularBox.subarray(4, 8), 4);
+    bytes.set([0, 0, 0, 0, 0, 0, 0, bytes.byteLength], 8);
+    bytes.set(regularBox.subarray(8), 16);
+
+    await expect(detectHeic(bytes)).resolves.toMatchObject({
+      isHeic: true,
+      brand: "heix",
+      mimeType: "image/heic",
+    });
+  });
+
   it("supports an ftyp box whose zero size extends to EOF", async () => {
     const bytes = createFtypBytes("heic");
     bytes.fill(0, 0, 4);

@@ -42,15 +42,31 @@ export function detectHeifBrand(bytes: Uint8Array): string | undefined {
     return undefined;
   }
 
-  const boxSize = readUint32(bytes, 0);
-  if (boxSize !== 0 && boxSize < 16) {
-    return undefined;
+  const size32 = readUint32(bytes, 0);
+  let headerSize = 8;
+  let boxEnd = bytes.byteLength;
+
+  if (size32 === 1) {
+    headerSize = 16;
+    if (bytes.byteLength < 24) {
+      return undefined;
+    }
+
+    const extendedSize = readUint64(bytes, 8);
+    if (extendedSize < 24n || extendedSize > BigInt(bytes.byteLength)) {
+      return undefined;
+    }
+    boxEnd = Number(extendedSize);
+  } else if (size32 !== 0) {
+    if (size32 < 16 || size32 > bytes.byteLength) {
+      return undefined;
+    }
+    boxEnd = size32;
   }
 
-  const boxEnd = boxSize === 0 ? bytes.byteLength : Math.min(boxSize, bytes.byteLength);
-  const brands: string[] = [readAscii(bytes, 8, 12)];
+  const brands: string[] = [readAscii(bytes, headerSize, headerSize + 4)];
 
-  for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
+  for (let offset = headerSize + 8; offset + 4 <= boxEnd; offset += 4) {
     brands.push(readAscii(bytes, offset, offset + 4));
   }
 
@@ -64,6 +80,10 @@ function readUint32(bytes: Uint8Array, offset: number): number {
     (bytes[offset + 2] ?? 0) * 0x100 +
     (bytes[offset + 3] ?? 0)
   );
+}
+
+function readUint64(bytes: Uint8Array, offset: number): bigint {
+  return (BigInt(readUint32(bytes, offset)) << 32n) | BigInt(readUint32(bytes, offset + 4));
 }
 
 function readAscii(bytes: Uint8Array, start: number, end: number): string {

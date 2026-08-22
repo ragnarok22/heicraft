@@ -69,5 +69,5 @@ export function getHeicExtensionFromMimeType(mimeType?: string): HeicExtension |
 }
 
 export function normalizeQuality(quality: number): number {
-  return Math.round(quality * 100);
+  return Math.max(1, Math.round(quality * 100));
 }
