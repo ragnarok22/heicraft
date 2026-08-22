@@ -20,4 +20,36 @@ describe("GitHub workflows", () => {
     expect(setupStep).toContain("uses: pnpm/action-setup");
     expect(setupStep).not.toMatch(/^\s+version:/m);
   });
+
+  it("uses CI Node versions compatible with the configured pnpm version", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      packageManager: string;
+    };
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+    const pnpmMajor = Number(/pnpm@(\d+)/.exec(packageJson.packageManager)?.[1]);
+    const nodeVersions = getCiNodeVersions(workflow);
+    const minimumNodeMajor = pnpmMajor >= 11 ? 22 : 18;
+
+    expect(Math.min(...nodeVersions)).toBeGreaterThanOrEqual(minimumNodeMajor);
+  });
+
+  it("advertises the oldest Node major exercised by CI", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+      engines: { node: string };
+    };
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+    const engineMinimumMajor = Number(/^>=(\d+)/.exec(packageJson.engines.node)?.[1]);
+
+    expect(engineMinimumMajor).toBe(Math.min(...getCiNodeVersions(workflow)));
+  });
 });
+
+function getCiNodeVersions(workflow: string): number[] {
+  const versionList = /node-version:\s*\[([^\]]+)]/.exec(workflow)?.[1];
+
+  if (!versionList) {
+    throw new Error("Unable to find the Node.js CI matrix.");
+  }
+
+  return versionList.split(",").map((version) => Number(version.trim()));
+}
