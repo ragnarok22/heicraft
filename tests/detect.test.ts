@@ -45,6 +45,17 @@ describe("detectHeic", () => {
     });
   });
 
+  it("supports an ftyp box whose zero size extends to EOF", async () => {
+    const bytes = createFtypBytes("heic");
+    bytes.fill(0, 0, 4);
+
+    await expect(detectHeic(bytes)).resolves.toMatchObject({
+      isHeic: true,
+      brand: "heic",
+      mimeType: "image/heic",
+    });
+  });
+
   it("uses MIME fallback when signature data is inconclusive", async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: "image/heic" });
     const result = await detectHeic(blob);
