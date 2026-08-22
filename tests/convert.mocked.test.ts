@@ -127,6 +127,16 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it("rejects Node.js file paths in browser environments", async () => {
+    mockBrowserEnvironment();
+    const { convertHeic } = await importBrowserConvert();
+
+    await expect(convertHeic("photo.heic")).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: "String file paths are only supported in Node.js.",
+    });
+  });
+
   it("rejects browser conversion without a 2D context", async () => {
     mockBrowserEnvironment();
     mockDecoderAndSharp(Buffer.from([]));
