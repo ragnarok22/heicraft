@@ -71,4 +71,14 @@ describe("getHeicInfo", () => {
 
     await expect(getHeicInfo(file)).rejects.toBeInstanceOf(ConversionError);
   });
+
+  it("uses a fallback message for non-Error extension-only decoder failures", async () => {
+    decodeMock.mockRejectedValue("decode failed");
+    const file = new File([new Uint8Array([1, 2, 3])], "photo.heic", { type: "image/heic" });
+
+    await expect(getHeicInfo(file)).rejects.toMatchObject({
+      code: "CONVERSION_ERROR",
+      message: "Conversion failed while decoding HEIC image.",
+    });
+  });
 });
