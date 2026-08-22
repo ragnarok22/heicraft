@@ -36,6 +36,10 @@ export async function convertHeic(
   try {
     decoded = await decodeHeic(normalized.bytes);
   } catch (error) {
+    throwIfAborted(options.signal);
+    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
+      throw error;
+    }
     throw new ConversionError(
       error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.",
     );
@@ -43,9 +47,20 @@ export async function convertHeic(
   throwIfAborted(options.signal);
 
   const mimeType = getOutputMimeType(format);
-  const data = isNodeEnvironment()
-    ? await encodeInNode(decoded, format, quality)
-    : await encodeInBrowser(decoded, format, quality, mimeType);
+  let data: Blob | Uint8Array;
+  try {
+    data = isNodeEnvironment()
+      ? await encodeInNode(decoded, format, quality)
+      : await encodeInBrowser(decoded, format, quality, mimeType);
+  } catch (error) {
+    throwIfAborted(options.signal);
+    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
+      throw error;
+    }
+    throw new ConversionError(
+      error instanceof Error ? error.message : "Conversion failed while encoding image.",
+    );
+  }
   throwIfAborted(options.signal);
 
   return {
@@ -91,6 +106,9 @@ async function encodeInNode(
 
     return new Uint8Array(output.buffer, output.byteOffset, output.byteLength);
   } catch (error) {
+    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
+      throw error;
+    }
     throw new ConversionError(
       error instanceof Error ? error.message : "Conversion failed while encoding image.",
     );
