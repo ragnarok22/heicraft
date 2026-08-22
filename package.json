@@ -70,13 +70,13 @@
     "sharp": "^0.34.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.16",
-    "@types/node": "^22.15.29",
-    "@vitest/coverage-v8": "^4.1.8",
+    "@biomejs/biome": "^2.5.9",
+    "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "tsup": "^8.5.1",
-    "typescript": "^5.8.3",
-    "vite": "^8.0.14",
-    "vitest": "^4.1.8"
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
   },
   "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621",
   "engines": {
