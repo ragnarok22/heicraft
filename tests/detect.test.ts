@@ -35,6 +35,10 @@ describe("detectHeic", () => {
     });
   });
 
+  it("returns false when input normalization fails", async () => {
+    await expect(isHeic(null as never)).resolves.toBe(false);
+  });
+
   it("rejects malformed ftyp boxes instead of scanning past the box", async () => {
     const bytes = createFtypBytes("isom", ["heic"]);
     bytes[3] = 8;
