@@ -70,6 +70,22 @@ describe("convertHeic with mocked backends", () => {
     expect(calls.webp).toHaveBeenCalledWith({ quality: 91 });
   });
 
+  it.each(["jpeg", "webp"] as const)(
+    "accepts zero quality for Node.js %s output",
+    async (format) => {
+      mockDecoder();
+      const { convertHeic } = await import("../src/convert");
+
+      const result = await convertHeic(createFtypBytes("heic"), { format, quality: 0 });
+
+      expect(result.data).toBeInstanceOf(Uint8Array);
+      if (!(result.data instanceof Uint8Array)) {
+        throw new Error("Expected Node.js conversion to return Uint8Array data.");
+      }
+      expect(result.data.byteLength).toBeGreaterThan(0);
+    },
+  );
+
   it("wraps Node.js encoder failures", async () => {
     mockDecoderAndSharp(Buffer.from([]), new Error("sharp failed"));
     const { convertHeic } = await import("../src/convert");
@@ -93,6 +109,18 @@ describe("convertHeic with mocked backends", () => {
   it("checks abort signals after encoding", async () => {
     const controller = new AbortController();
     mockDecoderAndSharp(Buffer.from([1]), undefined, () => controller.abort());
+    const { convertHeic } = await import("../src/convert");
+
+    await expect(
+      convertHeic(createFtypBytes("heic"), { signal: controller.signal }),
+    ).rejects.toMatchObject({
+      code: "ABORT_ERROR",
+    });
+  });
+
+  it("preserves an abort when the encoder fails after cancellation", async () => {
+    const controller = new AbortController();
+    mockDecoderAndSharp(Buffer.from([]), new Error("sharp failed"), () => controller.abort());
     const { convertHeic } = await import("../src/convert");
 
     await expect(
@@ -192,7 +220,26 @@ describe("convertHeic with mocked backends", () => {
       code: "CONVERSION_ERROR",
     });
   });
+
+  it("wraps browser canvas exceptions", async () => {
+    mockBrowserEnvironment();
+    mockDecoderAndSharp(Buffer.from([]));
+    mockCanvas({ error: new DOMException("canvas failed") });
+    const { convertHeic } = await importBrowserConvert();
+
+    await expect(convertHeic(createFtypBytes("heic"), { format: "png" })).rejects.toMatchObject({
+      name: "ConversionError",
+      code: "CONVERSION_ERROR",
+      message: "canvas failed",
+    });
+  });
 });
+
+function mockDecoder(): void {
+  vi.doMock("heic-decode", () => ({
+    default: vi.fn().mockResolvedValue(decodedImage),
+  }));
+}
 
 function mockDecoderAndSharp(
   output: Buffer,
@@ -243,9 +290,11 @@ async function importBrowserConvert(): Promise<typeof import("../src/convert")> 
 function mockCanvas({
   blob = new Blob([new Uint8Array([1])], { type: "image/jpeg" }),
   context = { putImageData: vi.fn() },
+  error,
 }: {
   blob?: Blob | null;
   context?: { putImageData: ReturnType<typeof vi.fn> } | null;
+  error?: unknown;
 }): void {
   vi.stubGlobal(
     "ImageData",
@@ -263,7 +312,13 @@ function mockCanvas({
       width: 0,
       height: 0,
       getContext: vi.fn(() => context),
-      toBlob: vi.fn((resolve: (blob: Blob | null) => void) => resolve(blob)),
+      toBlob: vi.fn((resolve: (blob: Blob | null) => void) => {
+        if (error !== undefined) {
+          throw error;
+        }
+
+        resolve(blob);
+      }),
     })),
   });
 }

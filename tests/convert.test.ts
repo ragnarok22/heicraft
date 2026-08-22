@@ -68,6 +68,20 @@ describe("convertHeic", () => {
     });
   });
 
+  it("preserves an abort when the decoder fails after cancellation", async () => {
+    const controller = new AbortController();
+    vi.doMock("heic-decode", () => ({
+      default: vi.fn(async () => {
+        controller.abort();
+        throw new Error("decode failed");
+      }),
+    }));
+
+    await expect(
+      convertHeic(createFtypBytes("heic"), { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(AbortError);
+  });
+
   it("accepts Blob input for validation and detection", async () => {
     mockDecoderFailure();
     const blob = new Blob([createFtypBytes("heic")], { type: "image/heic" });
