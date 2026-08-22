@@ -80,6 +80,16 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it("uses a fallback message for non-Error Node.js encoder failures", async () => {
+    mockDecoderAndSharp(Buffer.from([]), "sharp failed");
+    const { convertHeic } = await import("../src/convert");
+
+    await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
+      code: "CONVERSION_ERROR",
+      message: "Conversion failed while encoding image.",
+    });
+  });
+
   it("checks abort signals after encoding", async () => {
     const controller = new AbortController();
     mockDecoderAndSharp(Buffer.from([1]), undefined, () => controller.abort());
@@ -150,6 +160,18 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it("rejects mismatched browser MIME types for non-WebP output", async () => {
+    mockBrowserEnvironment();
+    mockDecoderAndSharp(Buffer.from([]));
+    mockCanvas({ blob: new Blob([new Uint8Array([1])], { type: "image/png" }) });
+    const { convertHeic } = await importBrowserConvert();
+
+    await expect(convertHeic(createFtypBytes("heic"), { format: "jpeg" })).rejects.toMatchObject({
+      code: "CONVERSION_ERROR",
+      message: "Expected browser encoder to return image/jpeg, got image/png.",
+    });
+  });
+
   it("wraps browser canvas encoding failures", async () => {
     mockBrowserEnvironment();
     mockDecoderAndSharp(Buffer.from([]));
@@ -164,7 +186,7 @@ describe("convertHeic with mocked backends", () => {
 
 function mockDecoderAndSharp(
   output: Buffer,
-  error?: Error,
+  error?: unknown,
   beforeResolve?: () => void,
 ): SharpCalls {
   vi.doMock("heic-decode", () => ({
@@ -173,7 +195,7 @@ function mockDecoderAndSharp(
 
   const toBuffer = vi.fn(async () => {
     beforeResolve?.();
-    if (error) {
+    if (error !== undefined) {
       throw error;
     }
 

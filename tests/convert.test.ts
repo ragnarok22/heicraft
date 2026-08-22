@@ -57,6 +57,17 @@ describe("convertHeic", () => {
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toBeInstanceOf(ConversionError);
   });
 
+  it("uses a fallback message for non-Error decoder failures", async () => {
+    vi.doMock("heic-decode", () => ({
+      default: vi.fn().mockRejectedValue("decode failed"),
+    }));
+
+    await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
+      code: "CONVERSION_ERROR",
+      message: "Conversion failed while decoding HEIC image.",
+    });
+  });
+
   it("accepts Blob input for validation and detection", async () => {
     mockDecoderFailure();
     const blob = new Blob([createFtypBytes("heic")], { type: "image/heic" });
