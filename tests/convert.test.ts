@@ -100,9 +100,15 @@ describe("convertHeic", () => {
   });
 
   it("wraps decoder failures in ConversionError", async () => {
-    mockDecoderFailure();
+    const cause = new Error("decode failed");
+    decodeMock.mockRejectedValue(cause);
 
-    await expect(convertHeic(createFtypBytes("heic"))).rejects.toBeInstanceOf(ConversionError);
+    await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
+      name: "ConversionError",
+      code: "CONVERSION_ERROR",
+      message: "decode failed",
+      cause,
+    });
   });
 
   it("uses a fallback message for non-Error decoder failures", async () => {
@@ -111,7 +117,15 @@ describe("convertHeic", () => {
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
       code: "CONVERSION_ERROR",
       message: "Conversion failed while decoding HEIC image.",
+      cause: "decode failed",
     });
+  });
+
+  it("does not rewrap typed decoder errors or discard their causes", async () => {
+    const error = new ConversionError("decode failed", { cause: new Error("invalid payload") });
+    decodeMock.mockRejectedValue(error);
+
+    await expect(convertHeic(createFtypBytes("heic"))).rejects.toBe(error);
   });
 
   it("preserves an abort when the decoder fails after cancellation", async () => {

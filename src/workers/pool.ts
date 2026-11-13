@@ -100,7 +100,7 @@ export class DecoderPool {
         slot.worker = worker;
         slot.cleanup = worker.listen(
           (response) => this.receive(slot, response),
-          (error) => this.retire(slot, new ConversionError(error.message)),
+          (error) => this.retire(slot, new ConversionError(error.message, { cause: error })),
         );
       }
       // An abort during asynchronous worker creation still has to terminate that worker.

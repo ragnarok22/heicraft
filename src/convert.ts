@@ -1,13 +1,13 @@
+import { decodeHeic } from "./decoder";
+import { detectNormalizedHeic } from "./detect";
 import {
   AbortError,
   ConversionError,
   InvalidInputError,
   ResourceLimitError,
-  UnsupportedFormatError,
   throwIfAborted,
+  UnsupportedFormatError,
 } from "./errors";
-import { decodeHeic } from "./decoder";
-import { detectNormalizedHeic } from "./detect";
 import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput, OutputFormat } from "./types";
 import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
@@ -52,6 +52,7 @@ export async function convertHeic(
       }
       throw new ConversionError(
         error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.",
+        { cause: error },
       );
     }
   }, options.signal);
@@ -70,6 +71,7 @@ export async function convertHeic(
     }
     throw new ConversionError(
       error instanceof Error ? error.message : "Conversion failed while encoding image.",
+      { cause: error },
     );
   }
   throwIfAborted(options.signal);
@@ -123,6 +125,7 @@ async function encodeInNode(
     }
     throw new ConversionError(
       error instanceof Error ? error.message : "Conversion failed while encoding image.",
+      { cause: error },
     );
   }
 }

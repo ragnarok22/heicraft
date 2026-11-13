@@ -152,15 +152,17 @@ describe("input utilities", () => {
   );
 
   it("wraps Blob read failures", async () => {
+    const cause = new Error("read failed");
     class FailingBlob extends Blob {
       override arrayBuffer(): Promise<ArrayBuffer> {
-        return Promise.reject(new Error("read failed"));
+        return Promise.reject(cause);
       }
     }
 
     await expect(normalizeInput(new FailingBlob())).rejects.toMatchObject({
       code: "INVALID_INPUT",
       message: "Unable to read Blob input.",
+      cause,
     });
   });
 

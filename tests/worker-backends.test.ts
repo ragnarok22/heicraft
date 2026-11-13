@@ -6,10 +6,10 @@ import {
   ResourceLimitError,
   UnsupportedFormatError,
 } from "../src/errors";
-import { createDecoderWorker } from "../src/workers/factory";
 import { executeRequest, responseTransfers } from "../src/workers/execute";
-import { deserializeError } from "../src/workers/protocol";
+import { createDecoderWorker } from "../src/workers/factory";
 import type { WorkerRequest } from "../src/workers/protocol";
+import { deserializeError, serializeError } from "../src/workers/protocol";
 
 const core = vi.hoisted(() => ({ decodeHeic: vi.fn(), readHeicMetadata: vi.fn() }));
 vi.mock("../src/decoder-core.ts", () => core);
@@ -65,8 +65,70 @@ describe("worker wire protocol", () => {
   ])("serializes a backend failure (%s)", async (error, code, message) => {
     core.decodeHeic.mockRejectedValue(error);
     const response = await executeRequest(request);
-    expect(response).toEqual({ id: 7, ok: false, error: { code, message } });
+    expect(response).toMatchObject({ id: 7, ok: false, error: { code, message } });
     expect(responseTransfers(response)).toEqual([]);
+  });
+
+  it("preserves decoder diagnostics across structured cloning", async () => {
+    const cause = new TypeError("invalid payload", { cause: new Error("invalid header") });
+    Object.assign(cause, { uncloneable: () => {} });
+    core.decodeHeic.mockRejectedValue(cause);
+
+    const response = structuredClone(await executeRequest(request));
+    expect(response.ok).toBe(false);
+    if (response.ok) throw new Error("Expected a decoder failure.");
+    const error = deserializeError(response.error);
+
+    expect(error).toBeInstanceOf(ConversionError);
+    expect(error.message).toBe(cause.message);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.cause).toMatchObject({
+      name: cause.name,
+      message: cause.message,
+      stack: cause.stack,
+      cause: { name: "Error", message: "invalid header" },
+    });
+    expect(error.cause).not.toHaveProperty("uncloneable");
+  });
+
+  it("preserves typed worker errors, their stacks, and existing causes", () => {
+    const original = new ResourceLimitError("too large", { cause: new Error("pixel limit") });
+    const error = deserializeError(structuredClone(serializeError(original)));
+
+    expect(error).toBeInstanceOf(ResourceLimitError);
+    expect(error.stack).toBe(original.stack);
+    expect(error.cause).toBeInstanceOf(Error);
+    expect(error.cause).toMatchObject({ message: "pixel limit" });
+  });
+
+  it("serializes non-Error failures without copying uncloneable values", () => {
+    const original = { callback: () => {}, self: undefined as unknown };
+    original.self = original;
+    const error = deserializeError(structuredClone(serializeError(original)));
+
+    expect(error).toBeInstanceOf(ConversionError);
+    expect(error.message).toBe("HEIC decoding failed.");
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
+  it("bounds cyclic and deeply nested cause chains", () => {
+    const cyclic = new Error("cyclic");
+    cyclic.cause = cyclic;
+    const error = deserializeError(structuredClone(serializeError(cyclic)));
+
+    expect(error.cause).toMatchObject({ message: "cyclic" });
+    expect(error.cause).not.toHaveProperty("cause");
+
+    let nested = new Error("root");
+    for (let index = 0; index < 20; index++) {
+      nested = new Error("nested", { cause: nested });
+    }
+    const restored = deserializeError(structuredClone(serializeError(nested)));
+    let depth = 0;
+    for (let cause = restored.cause; cause instanceof Error; cause = cause.cause) {
+      depth++;
+    }
+    expect(depth).toBe(8);
   });
 
   it.each([

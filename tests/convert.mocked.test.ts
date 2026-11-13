@@ -106,12 +106,14 @@ describe("convertHeic with mocked backends", () => {
   );
 
   it("wraps Node.js encoder failures", async () => {
-    mockDecoderAndSharp(Buffer.from([]), new Error("sharp failed"));
+    const cause = new Error("sharp failed");
+    mockDecoderAndSharp(Buffer.from([]), cause);
     const { convertHeic } = await import("../src/convert");
 
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
       code: "CONVERSION_ERROR",
       message: "sharp failed",
+      cause,
     });
   });
 
@@ -122,6 +124,7 @@ describe("convertHeic with mocked backends", () => {
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
       code: "CONVERSION_ERROR",
       message: "Conversion failed while encoding image.",
+      cause: "sharp failed",
     });
   });
 
@@ -281,13 +284,15 @@ describe("convertHeic with mocked backends", () => {
   it("wraps browser canvas exceptions", async () => {
     mockBrowserEnvironment();
     mockDecoderAndSharp(Buffer.from([]));
-    mockCanvas({ error: new DOMException("canvas failed") });
+    const cause = new DOMException("canvas failed");
+    mockCanvas({ error: cause });
     const { convertHeic } = await importBrowserConvert();
 
     await expect(convertHeic(createFtypBytes("heic"), { format: "png" })).rejects.toMatchObject({
       name: "ConversionError",
       code: "CONVERSION_ERROR",
       message: "canvas failed",
+      cause,
     });
   });
 });

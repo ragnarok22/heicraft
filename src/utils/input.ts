@@ -53,7 +53,7 @@ export async function withInputReader<T>(
         } catch (error) {
           throwIfAborted(options.signal);
           if (error instanceof ResourceLimitError) throw error;
-          throw new InvalidInputError("Unable to read Blob input.");
+          throw new InvalidInputError("Unable to read Blob input.", { cause: error });
         }
       },
     });
@@ -171,7 +171,7 @@ async function withInputFile<T>(
     if (error instanceof InvalidInputError || error instanceof ResourceLimitError) {
       throw error;
     }
-    throw new InvalidInputError(`Unable to read input file: ${filePath}`);
+    throw new InvalidInputError(`Unable to read input file: ${filePath}`, { cause: error });
   }
 }
 
@@ -264,7 +264,7 @@ async function readBlob(
   } catch (error) {
     throwIfAborted(signal);
     if (error instanceof ResourceLimitError) throw error;
-    throw new InvalidInputError("Unable to read Blob input.");
+    throw new InvalidInputError("Unable to read Blob input.", { cause: error });
   }
 }
 

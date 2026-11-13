@@ -79,11 +79,13 @@ describe("bounded file input", () => {
 
   it("closes files when reading fails", async () => {
     mockFile(new Uint8Array(1));
-    file.read.mockRejectedValue(new Error("read failed"));
+    const cause = new Error("read failed");
+    file.read.mockRejectedValue(cause);
 
     await expect(normalizeInput("photo.heic")).rejects.toMatchObject({
       code: "INVALID_INPUT",
       message: "Unable to read input file: photo.heic",
+      cause,
     });
     expect(file.close).toHaveBeenCalledOnce();
   });
@@ -204,9 +206,10 @@ describe("bounded file input", () => {
 
   it("closes the file if partial detection fails to read it", async () => {
     mockFile(createFtypBytes("heic"));
-    file.read.mockRejectedValue(new Error("read failed"));
+    const cause = new Error("read failed");
+    file.read.mockRejectedValue(cause);
 
-    await expect(detectHeic("photo.heic")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await expect(detectHeic("photo.heic")).rejects.toMatchObject({ code: "INVALID_INPUT", cause });
     expect(file.close).toHaveBeenCalledOnce();
   });
 });

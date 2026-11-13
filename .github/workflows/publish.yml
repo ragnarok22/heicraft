@@ -53,10 +53,7 @@ jobs:
       - name: Check package contents
         run: pnpm run pack:check
 
-      - name: Run tests
-        run: pnpm test
-
-      - name: Run coverage
+      - name: Run tests with coverage
         run: pnpm run coverage
 
       - name: Extract version from tag

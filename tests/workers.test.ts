@@ -169,9 +169,13 @@ describe("bounded decoder workers", () => {
     await expect(pool.run(request)).rejects.toThrow("load failed");
     await expect(pool.run(request)).rejects.toThrow("post failed");
     const failing = pool.run(request);
-    const assertion = expect(failing).rejects.toBeInstanceOf(ConversionError);
+    const cause = new Error("worker crashed");
+    const assertion = expect(failing).rejects.toMatchObject({
+      name: "ConversionError",
+      cause,
+    });
     await crashed.posted.promise;
-    crashed.onFailure?.(new Error("worker crashed"));
+    crashed.onFailure?.(cause);
     await assertion;
     const next = pool.run(request);
     await recovered.posted.promise;
