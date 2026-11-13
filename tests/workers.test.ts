@@ -218,9 +218,13 @@ describe("bounded decoder workers", () => {
 
   it("classifies creation failures as worker errors, not image parsing failures", async () => {
     const cause = new Error("Missing worker asset");
-    const pool = new DecoderPool(async () => {
-      throw cause;
-    }, 1, 1);
+    const pool = new DecoderPool(
+      async () => {
+        throw cause;
+      },
+      1,
+      1,
+    );
     const result = pool.run(request);
     await expect(result).rejects.toBeInstanceOf(WorkerError);
     await expect(result).rejects.toBeInstanceOf(ConversionError);
