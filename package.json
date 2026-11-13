@@ -1,6 +1,6 @@
 {
   "name": "heicraft",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "Convert HEIC/HEIF images to JPEG, PNG, and WebP in Node.js and browsers, with TypeScript support, format detection, and basic metadata inspection.",
   "type": "module",
   "license": "MIT",
