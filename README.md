@@ -7,7 +7,7 @@
 
 Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 
-> **Version 0.3.0:** This README documents the 0.3.0 API. If you use the older 0.1.1 package, follow its [versioned README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md); that version does not include worker-based conversion, resource limits, or the enhanced detection/metadata options below.
+> **Version 0.3.1:** This README documents the 0.3.1 API. If you use the older 0.1.1 package, follow its [versioned README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md); that version does not include worker-based conversion, resource limits, or the enhanced detection/metadata options below.
 
 `heicraft` provides a TypeScript-first API for single-image conversion, signature-based detection, and basic metadata inspection. Decoding runs in workers, with per-call resource limits, cancellation, and typed errors.
 
@@ -27,10 +27,10 @@ Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 Install the version documented here:
 
 ```sh
-npm install heicraft@0.3.0
+npm install heicraft@0.3.1
 ```
 
-This command requires 0.3.0 to be published to npm; creating a Git tag alone does not publish the package. Check availability with `npm view heicraft@0.3.0 version`.
+This command requires 0.3.1 to be published to npm; creating a Git tag alone does not publish the package. Check availability with `npm view heicraft@0.3.1 version`.
 
 For a source checkout instead, follow the [development setup](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md#development-setup).
 

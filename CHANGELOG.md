@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.1
+
+Release date: 2026-11-13.
+
+### Fixed
+
+- Share error classes between the main and detection-only entrypoints.
+- Preserve colors when converting HEIC images with premultiplied alpha.
+- Reject detached binary inputs with `InvalidInputError`, preserving the original cause.
+
+### Changed
+
+- Skip unnecessary RGB normalization during optional transparency inspection.
+
 ## 0.3.0
 
 Release date: 2026-11-13.
