@@ -18,6 +18,8 @@ Modern HEIC/HEIF conversion toolkit for JavaScript and TypeScript.
 npm install heicraft
 ```
 
+Node.js support is limited to maintained LTS lines: 22 (22.13.0 or later), 24, and 26. Use the latest patch release of a supported line.
+
 ## Browser Usage
 
 ```ts
