@@ -110,7 +110,7 @@ async function readHeifBrand(
       const candidate = brandCodes.get(view.getUint32(index));
       if (!candidate) continue;
       brand = preferredBrand(brand, candidate);
-      if (av1Brands.has(brand)) return brand;
+      if (brand && av1Brands.has(brand)) return brand;
     }
   }
   return brand;

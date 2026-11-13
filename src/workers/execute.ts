@@ -1,3 +1,4 @@
+import { encodeOffscreen } from "../browser/encode.ts";
 import { decodeHeic, readHeicMetadata } from "../decoder-core.ts";
 import { serializeError, type WorkerRequest, type WorkerResponse } from "./protocol.ts";
 
@@ -23,4 +24,3 @@ export async function executeRequest(request: WorkerRequest): Promise<WorkerResp
 export function responseTransfers(response: WorkerResponse): ArrayBuffer[] {
   return response.ok && "data" in response.result ? [response.result.data.buffer] : [];
 }
-import { encodeOffscreen } from "../browser/encode.ts";

@@ -63,7 +63,19 @@ describe("convertHeic with mocked backends", () => {
     const { convertHeic } = await import("../src/convert");
     const pending = Array.from({ length: 10 }, () => convertHeic(createFtypBytes()));
     const settled = Promise.allSettled(pending);
-    await encoding;
+    const diagnostic = setTimeout(() => {
+      console.log({
+        calls: calls.toBuffer.mock.calls.length,
+        sharp: calls.sharp.mock.calls.length,
+      });
+    }, 100);
+    await Promise.race([
+      encoding,
+      settled.then((results) => {
+        throw new Error(`Conversions ended before encoding: ${JSON.stringify(results)}`);
+      }),
+    ]);
+    clearTimeout(diagnostic);
     const excessInput = new CountingBlob([createFtypBytes()]);
     const excess = convertHeic(excessInput);
     const rejected = Promise.allSettled([excess]);
