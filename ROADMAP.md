@@ -4,7 +4,7 @@ heicraft aims to make HEIC/HEIF conversion straightforward in Node.js and browse
 
 This document describes direction, not a release schedule. **Now** separates the implemented foundation from current maintenance priorities. **Next** lists proposed priorities; **Later** covers longer-term possibilities. Future work is not a promise of a particular version or delivery date.
 
-For usage and API behavior, see the [README](./README.md). For released changes, see the [Changelog](./CHANGELOG.md). The implemented baseline below describes the current source tree, which may be ahead of the latest npm release.
+For usage and API behavior, see the [README](./README.md). For released changes, see the [Changelog](./CHANGELOG.md). The implemented baseline below covers 0.3.0; ongoing work on `main` may be ahead of the latest published npm version.
 
 ## Now — Maintain the Foundation
 

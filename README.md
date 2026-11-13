@@ -7,7 +7,7 @@
 
 Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 
-> **Upcoming 0.3.0 documentation:** This README describes the current `main` branch, not the published **0.1.1** package. For that release, use the [0.1.1 README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md). Worker-based conversion, resource limits, and the enhanced detection/metadata options below are not available in 0.1.1.
+> **Version 0.3.0:** This README documents the 0.3.0 API. If you use the older 0.1.1 package, follow its [versioned README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md); that version does not include worker-based conversion, resource limits, or the enhanced detection/metadata options below.
 
 `heicraft` provides a TypeScript-first API for single-image conversion, signature-based detection, and basic metadata inspection. Decoding runs in workers, with per-call resource limits, cancellation, and typed errors.
 
@@ -24,13 +24,15 @@ Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 
 ## Installation
 
-Install the latest **published** release:
+Install the version documented here:
 
 ```sh
-npm install heicraft
+npm install heicraft@0.3.0
 ```
 
-This does not install upcoming 0.3.0 from `main`. To try the implementation described below, build a local checkout using the [development setup](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md#development-setup). The requirements below apply to that checkout.
+This command requires 0.3.0 to be published to npm; creating a Git tag alone does not publish the package. Check availability with `npm view heicraft@0.3.0 version`.
+
+For a source checkout instead, follow the [development setup](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md#development-setup).
 
 The package is **ESM-only** and includes TypeScript declarations.
 
@@ -43,7 +45,7 @@ The production Vite build is smoke-tested in Chromium. This is not a guarantee o
 
 ### Upgrading to 0.3.0
 
-For the upcoming 0.3.0 release, version 0.2.0 is intentionally skipped.
+Version 0.2.0 was intentionally skipped.
 Detection requires a binary HEVC signature, default resource limits are 20 MiB
 and 25 million pixels, and `hasAlpha` requires `inspectAlpha: true`.
 Browser deployments must include the worker asset.
@@ -376,7 +378,7 @@ Wrapped errors retain the underlying failure in `cause`. Decoder errors crossing
 ## Project Documents
 
 - [Roadmap](https://github.com/ragnarok22/heicraft/blob/main/ROADMAP.md) — current foundation and future direction.
-- [Changelog](./CHANGELOG.md) — upcoming and released changes.
+- [Changelog](./CHANGELOG.md) — release history and migration notes.
 - [Contributing](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md) — development setup and contribution guidelines.
 - [Security Policy](https://github.com/ragnarok22/heicraft/blob/main/SECURITY.md) — private reporting and untrusted-input guidance.
 - [Third-Party Notices](./THIRD_PARTY_NOTICES.md) — runtime dependencies, attribution, and licensing.

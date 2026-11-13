@@ -37,7 +37,7 @@ No fixed acknowledgement or resolution time is guaranteed. Do not interpret the 
 
 ## Handling Untrusted Images
 
-**Version scope:** The resource limits and worker behavior below target upcoming 0.3.0 on `main`. The published **0.1.1** package does not provide these byte/pixel limits or worker-based decoding; do not rely on them when deploying that version. See its [versioned README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md) for the released API.
+**Version scope:** The resource limits and worker behavior below apply to **0.3.0**. The older **0.1.1** package does not provide these byte/pixel limits or worker-based decoding; do not rely on them when deploying that version. See its [versioned README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md) for that API.
 
 Image parsing, decompression, and encoding are resource-intensive operations over attacker-controlled data. Treat uploaded images as untrusted even if their filename, MIME type, or detected signature looks correct.
 
@@ -70,7 +70,7 @@ See [Resource Limits](./README.md#resource-limits) and [Workers and Cancellation
 
 ## Dependency Security
 
-In the upcoming 0.3.0 release, HEIC decoding uses `libheif-js`/libheif WebAssembly. Node.js output encoding uses `sharp` and its native dependency stack; browser output encoding uses the platform OffscreenCanvas or DOM canvas API.
+In 0.3.0, HEIC decoding uses `libheif-js`/libheif WebAssembly. Node.js output encoding uses `sharp` and its native dependency stack; browser output encoding uses the platform OffscreenCanvas or DOM canvas API.
 
 Keep resolved dependencies and the host runtime updated, review upstream advisories, and test upgrades against your workload. A heicraft version alone does not identify every transitive or platform-specific binary in your deployment.
 

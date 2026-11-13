@@ -4,7 +4,7 @@ Thanks for helping improve `heicraft`.
 
 ## Development Setup
 
-Work from a repository checkout, not the published npm package. The current `main` branch targets upcoming 0.3.0; see the [README's release notice](./README.md).
+Work from a repository checkout, not the published npm package. The `main` branch may include changes beyond the latest release; the [README](./README.md) identifies the documented API version.
 
 Prerequisites:
 
@@ -60,7 +60,7 @@ pnpm exec vite preview --config examples/vite.config.ts --host 127.0.0.1
 
 Open `http://127.0.0.1:4173/browser.html`, or append `/browser.html` to the local URL printed by Vite if it chooses another port. Select a HEIC/HEIF image; [`tests/fixtures/pattern.heic`](./tests/fixtures/pattern.heic) is a small, redistributable fixture you can use.
 
-This builds [`examples/browser.html`](./examples/browser.html) against the local library's `dist` output, not npm's published 0.1.1. The example assets go to `examples/dist`, separate from the package build. Rebuild both the library and example after changing library code; restart the preview server if needed.
+This builds [`examples/browser.html`](./examples/browser.html) against the local library's `dist` output, not a registry installation. The example assets go to `examples/dist`, separate from the package build. Rebuild both the library and example after changing library code; restart the preview server if needed.
 
 Use the production build/preview commands, not a direct `file://` URL or `vite dev`. The current worker bundle is verified through Vite's production build; development-server dependency optimization is not currently supported by this example.
 

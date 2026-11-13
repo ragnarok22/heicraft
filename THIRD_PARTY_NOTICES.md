@@ -2,7 +2,7 @@
 
 heicraft uses third-party software for decoding and encoding images. This document identifies the principal runtime components, how they are distributed, and where to find their source and license information.
 
-**Version scope:** These notices target upcoming 0.3.0 on `main`. For the published 0.1.1 package and its dependency stack, use the [0.1.1 notices](https://github.com/ragnarok22/heicraft/blob/v0.1.1/THIRD_PARTY_NOTICES.md) and the licenses distributed with that package.
+**Version scope:** These notices describe the 0.3.0 dependency stack. For the older 0.1.1 package, use the [0.1.1 notices](https://github.com/ragnarok22/heicraft/blob/v0.1.1/THIRD_PARTY_NOTICES.md) and the licenses distributed with that version.
 
 It is a licensing summary, **not an exhaustive dependency inventory, source offer, or compliance certification**. Upstream license texts and notices govern their respective components. This document is informational and is not legal advice.
 
