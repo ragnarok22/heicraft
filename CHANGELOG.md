@@ -2,26 +2,6 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
-
-### Added
-
-- Lightweight `heicraft/detect` entrypoint for detection-only consumers, without
-  emitting decoder workers in production Vite builds.
-- Cross-realm Blob/File support, including files created in iframes.
-- WebKit smoke coverage and focused native-worker/encoder checks for macOS and Windows.
-
-### Changed
-
-- Transfer library-owned input buffers directly to workers instead of making
-  another compressed-input copy. Caller-owned buffers remain protected.
-
-### Fixed
-
-- Preserve decoder dependency/loading failures across worker serialization and
-  propagate them from metadata inspection.
-- Retain valid dimensions and image counts when optional alpha rendering fails.
-
 ## 0.3.0
 
 Release date: 2026-11-13.
@@ -38,9 +18,13 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
   and RGBA allocation where applicable, with typed `ResourceLimitError` failures.
 - Dimensions and image-count inspection without decoding pixels, plus opt-in
   transparency inspection through `getHeicInfo(input, { inspectAlpha: true })`.
+- Lightweight `heicraft/detect` entrypoint for detection-only consumers, without
+  emitting decoder workers in production Vite builds.
+- Cross-realm Blob/File support, including files created in iframes.
 - Real-image integration tests for JPEG, PNG, WebP, rotation, and transparency.
 - Cross-runtime smoke tests against the actual npm tarball in Node.js and Chromium,
   including worker cancellation, OffscreenCanvas, and DOM fallback paths.
+- WebKit smoke coverage and focused native-worker/encoder checks for macOS and Windows.
 
 ### Changed
 
@@ -51,6 +35,8 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
 - Inspect only the required input ranges for detection, scan brands without
   per-brand allocations, and yield during large scans to preserve responsiveness.
 - Avoid redundant copies of decoded pixel buffers and preserve typed-array ranges.
+- Transfer library-owned input buffers directly to workers instead of making
+  another compressed-input copy. Caller-owned buffers remain protected.
 - Preserve error causes and decoder diagnostics across worker boundaries.
 - Support maintained Node.js LTS lines 22 (22.13.0+), 24, and 26.
 - Identify the documented release version, retain older-version guidance, and document
@@ -62,6 +48,9 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
   or MIME hints. Distinguish HEVC, AV1, and generic HEIF container signatures.
 - Propagate worker startup and transport failures from metadata inspection rather
   than silently returning signature-only results.
+- Preserve decoder dependency/loading failures across worker serialization and
+  propagate them from metadata inspection.
+- Retain valid dimensions and image counts when optional alpha rendering fails.
 - Reject FIFO filesystem inputs without blocking while waiting for a writer.
 - Validate release tags without shell expansion, retaining useful mismatch messages.
 - Check file growth and input limits while reading, and preserve cancellation errors

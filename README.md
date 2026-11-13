@@ -218,10 +218,10 @@ Invalid or unreadable inputs and byte-limit failures return `false`. Cancellatio
 
 Detection is not a full validity check: a matching signature does not guarantee that the payload can be decoded.
 
-#### Detection-only entrypoint (unreleased)
+#### Detection-only entrypoint
 
-Development builds also provide a dedicated entrypoint for applications that only
-need detection:
+Version 0.3.0 also provides a dedicated entrypoint for applications that only need
+detection:
 
 ```ts
 import { detectHeic, isHeic } from "heicraft/detect";
@@ -231,7 +231,7 @@ It exposes detection functions, their input/result types, and the relevant typed
 errors without referencing the decoder, encoders, or worker factories. A
 detection-only production Vite build does not emit the decoder worker asset.
 The existing imports from `heicraft` remain supported. See the
-[unreleased changelog](./CHANGELOG.md#unreleased) for availability in registry releases.
+[0.3.0 changelog](./CHANGELOG.md#030) for release details.
 
 ### `detectHeic(input, options?)`
 
