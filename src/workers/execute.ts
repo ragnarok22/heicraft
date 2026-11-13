@@ -1,4 +1,4 @@
-import { encodeOffscreen } from "../browser/encode.ts";
+import { encodeOffscreen } from "../encoders/browser.ts";
 import { decodeHeic, readHeicMetadata } from "../decoder-core.ts";
 import { serializeError, type WorkerRequest, type WorkerResponse } from "./protocol.ts";
 

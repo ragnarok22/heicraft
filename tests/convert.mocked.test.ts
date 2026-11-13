@@ -48,6 +48,9 @@ describe("convertHeic with mocked backends", () => {
 
   it("holds admission until encoding completes and releases it after failure", async () => {
     const calls = mockDecoderAndSharp(Buffer.from([1]));
+    const { convertHeic } = await import("../src/convert");
+    await convertHeic(createFtypBytes());
+    calls.toBuffer.mockClear();
     let finish!: (error?: Error) => void;
     let started!: () => void;
     const encoding = new Promise<void>((resolve) => {
@@ -57,25 +60,12 @@ describe("convertHeic with mocked backends", () => {
       finish = (error) => (error ? reject(error) : resolve(Buffer.from([1])));
     });
     calls.toBuffer.mockImplementation(() => {
-      if (calls.toBuffer.mock.calls.length === 10) started();
+      started();
       return output;
     });
-    const { convertHeic } = await import("../src/convert");
     const pending = Array.from({ length: 10 }, () => convertHeic(createFtypBytes()));
     const settled = Promise.allSettled(pending);
-    const diagnostic = setTimeout(() => {
-      console.log({
-        calls: calls.toBuffer.mock.calls.length,
-        sharp: calls.sharp.mock.calls.length,
-      });
-    }, 100);
-    await Promise.race([
-      encoding,
-      settled.then((results) => {
-        throw new Error(`Conversions ended before encoding: ${JSON.stringify(results)}`);
-      }),
-    ]);
-    clearTimeout(diagnostic);
+    await encoding;
     const excessInput = new CountingBlob([createFtypBytes()]);
     const excess = convertHeic(excessInput);
     const rejected = Promise.allSettled([excess]);
@@ -209,6 +199,37 @@ describe("convertHeic with mocked backends", () => {
     expect(result.data).toBe(blob);
     expect(result.mimeType).toBe("image/jpeg");
   });
+
+  it.each([false, true])(
+    "uses offscreen worker output with a DOM fallback (%s)",
+    async (fallback) => {
+      mockBrowserEnvironment();
+      mockDecoderAndSharp(Buffer.from([]));
+      vi.stubGlobal(
+        "OffscreenCanvas",
+        class {
+          async convertToBlob() {
+            return new Blob();
+          }
+        },
+      );
+      const { convertHeic } = await importBrowserConvert();
+      const { convertHeicInWorker } = await import("../src/decoder");
+      const blob = new Blob([new Uint8Array([1])], { type: "image/png" });
+      vi.mocked(convertHeicInWorker).mockResolvedValue(fallback ? decodedImage : blob);
+      if (fallback) mockCanvas({ blob });
+      else vi.stubGlobal("document", undefined);
+      const result = await convertHeic(createFtypBytes(), { format: "png", filename: "photo.png" });
+      expect(result).toMatchObject({ data: blob, filename: "photo.png", mimeType: "image/png" });
+      expect(convertHeicInWorker).toHaveBeenCalledWith(
+        expect.any(Uint8Array),
+        25_000_000,
+        "png",
+        0.92,
+        undefined,
+      );
+    },
+  );
 
   it.each([
     ["Uint8Array", Uint8Array],
@@ -354,6 +375,7 @@ function mockDecoderAndSharp(
 ): SharpCalls {
   vi.doMock("../src/decoder", () => ({
     decodeHeic: vi.fn().mockResolvedValue(decodedImage),
+    convertHeicInWorker: vi.fn().mockResolvedValue(decodedImage),
   }));
 
   const toBuffer = vi.fn(async () => {

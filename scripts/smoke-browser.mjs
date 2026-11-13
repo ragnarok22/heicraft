@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { chromium } from "playwright";
 import sharp from "sharp";
 import { build, preview } from "vite";
-import { convertHeic } from "../dist/index.js";
 
 const projectRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
 const fixture = await readFile(new URL("../tests/fixtures/pattern.heic", import.meta.url));
@@ -14,8 +15,11 @@ const directory = await mkdtemp(join(tmpdir(), "heicraft-browser-"));
 let server;
 let browser;
 let conversionTimeout;
+let convertHeic;
 
 try {
+  const packageRoot = await unpackPackage();
+  ({ convertHeic } = await import(pathToFileURL(join(packageRoot, "dist/index.js")).href));
   await writeFile(
     join(directory, "index.js"),
     'import { convertHeic } from "heicraft"; window.__heicraftConvertHeic = convertHeic;\n',
@@ -26,7 +30,7 @@ try {
     '<script type="module" src="/index.js"></script>\n',
   );
   await mkdir(join(directory, "node_modules"));
-  await symlink(projectRoot, join(directory, "node_modules", "heicraft"), "dir");
+  await symlink(packageRoot, join(directory, "node_modules", "heicraft"), "dir");
 
   const outputDirectory = join(directory, "dist");
   await build({
@@ -98,6 +102,8 @@ try {
         "Browser conversions must reuse a real decoder worker.",
       );
       await checkWorkerCancellation(page);
+      await checkBrowserEncodingPaths(page);
+      await checkOrientedAlpha(page);
     })(),
     new Promise((_, reject) => {
       conversionTimeout = setTimeout(
@@ -118,6 +124,92 @@ try {
       await rm(directory, { recursive: true, force: true });
     }
   }
+}
+
+async function unpackPackage() {
+  const run = promisify(execFile);
+  const { stdout } = await run(
+    "npm",
+    ["pack", "--ignore-scripts", "--json", "--pack-destination", directory],
+    { cwd: projectRoot },
+  );
+  const [packed] = JSON.parse(stdout);
+  const files = new Set(packed.files.map((file) => file.path));
+  for (const required of [
+    "dist/index.js",
+    "dist/index.d.ts",
+    "dist/node-worker.js",
+    "dist/browser-worker.js",
+    "dist/libheif-js.LICENSE",
+  ]) {
+    assert.ok(files.has(required), `Published package is missing ${required}.`);
+  }
+  await run("tar", ["-xzf", join(directory, packed.filename), "-C", directory]);
+  const packageRoot = join(directory, "package");
+  const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
+  await mkdir(join(packageRoot, "node_modules"));
+  // Reuse installed dependencies offline, but never resolve heicraft's own files
+  // from the source tree: both runtimes execute the actual npm tarball.
+  for (const dependency of Object.keys(manifest.dependencies)) {
+    await symlink(
+      join(projectRoot, "node_modules", dependency),
+      join(packageRoot, "node_modules", dependency),
+      "dir",
+    );
+  }
+  console.log(`Testing npm artifact ${packed.filename}.`);
+  return packageRoot;
+}
+
+async function checkBrowserEncodingPaths(page) {
+  const paths = await page.evaluate(async (bytes) => {
+    const input = new Uint8Array(bytes);
+    const createElement = document.createElement;
+    const Offscreen = window.OffscreenCanvas;
+    let canvases = 0;
+    document.createElement = function (name, ...args) {
+      if (name === "canvas") {
+        canvases++;
+        if (window.OffscreenCanvas) throw new Error("Main-thread canvas must not be used.");
+      }
+      return createElement.call(this, name, ...args);
+    };
+    try {
+      const offscreen = await window.__heicraftConvertHeic(input, { format: "png" });
+      if (!(offscreen.data instanceof Blob)) throw new Error("Expected offscreen Blob output.");
+      const offscreenCanvases = canvases;
+      window.OffscreenCanvas = undefined;
+      const fallback = await window.__heicraftConvertHeic(input, { format: "png" });
+      if (!(fallback.data instanceof Blob)) throw new Error("Expected fallback Blob output.");
+      return { offscreenCanvases, fallbackCanvases: canvases - offscreenCanvases };
+    } finally {
+      document.createElement = createElement;
+      window.OffscreenCanvas = Offscreen;
+    }
+  }, Array.from(fixture));
+  assert.deepEqual(paths, { offscreenCanvases: 0, fallbackCanvases: 1 });
+  console.log("Offscreen worker encoding and DOM canvas fallback passed.");
+}
+
+async function checkOrientedAlpha(page) {
+  const input = await readFile(new URL("../tests/fixtures/oriented-alpha.heic", import.meta.url));
+  const result = await page.evaluate(async (bytes) => {
+    const result = await window.__heicraftConvertHeic(new Uint8Array(bytes), { format: "png" });
+    return Array.from(new Uint8Array(await result.data.arrayBuffer()));
+  }, Array.from(input));
+  const { data, info } = await sharp(Buffer.from(result))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 24);
+  assert.equal(info.height, 40);
+  for (const [x, y, alpha] of [
+    [17, 10, 255],
+    [17, 30, 96],
+  ]) {
+    assert.ok(Math.abs(data[(y * info.width + x) * 4 + 3] - alpha) <= 1);
+  }
+  console.log("Non-square HEIC rotation and transparency passed in Chromium.");
 }
 
 async function checkWorkerCancellation(page) {

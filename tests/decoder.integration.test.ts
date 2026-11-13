@@ -6,6 +6,33 @@ import { convertHeic, detectHeic, getHeicInfo, ResourceLimitError } from "../src
 const fixture = await readFile(new URL("./fixtures/pattern.heic", import.meta.url));
 
 describe("real HEIC conversion", () => {
+  it("applies HEIF rotation and preserves non-opaque alpha on a non-square image", async () => {
+    const input = await readFile(new URL("./fixtures/oriented-alpha.heic", import.meta.url));
+    await expect(getHeicInfo(input, { inspectAlpha: true })).resolves.toMatchObject({
+      width: 24,
+      height: 40,
+      imagesCount: 1,
+      hasAlpha: true,
+    });
+    const result = await convertHeic(input, { format: "png" });
+    if (!(result.data instanceof Uint8Array)) throw new Error("Expected Node.js output bytes.");
+    const { data, info } = await sharp(result.data)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect(info).toMatchObject({ width: 24, height: 40, channels: 4 });
+    for (const x of [10, 30]) {
+      for (const y of [6, 18]) {
+        // HEIF stores a clockwise 90-degree rotation: (x,y) -> (23-y,x).
+        const offset = (x * info.width + 23 - y) * 4;
+        const expected = [x < 20 ? 220 : 40, y < 12 ? 180 : 60, 100, x < 20 ? 255 : 96];
+        for (let channel = 0; channel < 4; channel++) {
+          expect(Math.abs(data[offset + channel] - expected[channel])).toBeLessThanOrEqual(2);
+        }
+      }
+    }
+  });
+
   it.each(["jpeg", "png", "webp"] as const)("encodes a readable %s image", async (format) => {
     const input = Buffer.from(fixture);
     const result = await convertHeic(input, { format, quality: 0.9 });

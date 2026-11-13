@@ -1,6 +1,7 @@
-import { canEncodeOffscreen, assertBrowserOutputMimeType } from "./browser/encode";
 import { convertHeicInWorker, decodeHeic } from "./decoder";
 import { detectNormalizedHeic } from "./detect";
+import { canEncodeOffscreen, encodeInBrowser } from "./encoders/browser";
+import { encodeInNode } from "./encoders/node";
 import {
   AbortError,
   ConversionError,
@@ -9,11 +10,11 @@ import {
   throwIfAborted,
   UnsupportedFormatError,
 } from "./errors";
-import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput, OutputFormat } from "./types";
+import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput } from "./types";
 import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 import { resolveMaxPixels } from "./utils/limits";
-import { assertOutputFormat, getOutputMimeType, normalizeQuality } from "./utils/mime";
+import { assertOutputFormat, getOutputMimeType } from "./utils/mime";
 import { withOperationAdmission } from "./workers/runtime";
 
 export async function convertHeic(
@@ -114,84 +115,4 @@ function assertQuality(quality?: number): void {
   if (typeof quality !== "number" || Number.isNaN(quality) || quality < 0 || quality > 1) {
     throw new InvalidInputError("Quality must be a number between 0 and 1.");
   }
-}
-
-async function encodeInNode(
-  decoded: DecodedImage,
-  format: OutputFormat,
-  quality: number,
-): Promise<Uint8Array> {
-  try {
-    const sharpModule = await import("sharp");
-    const sharp = sharpModule.default;
-    const { buffer, byteOffset, byteLength } = decoded.data;
-    const image = sharp(Buffer.from(buffer, byteOffset, byteLength), {
-      raw: {
-        width: decoded.width,
-        height: decoded.height,
-        channels: 4,
-      },
-    });
-
-    const output =
-      format === "jpeg"
-        ? await image.jpeg({ quality: normalizeQuality(quality) }).toBuffer()
-        : format === "webp"
-          ? await image.webp({ quality: normalizeQuality(quality) }).toBuffer()
-          : await image.png().toBuffer();
-
-    return new Uint8Array(output.buffer, output.byteOffset, output.byteLength);
-  } catch (error) {
-    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
-      throw error;
-    }
-    throw new ConversionError(
-      error instanceof Error ? error.message : "Conversion failed while encoding image.",
-      { cause: error },
-    );
-  }
-}
-
-async function encodeInBrowser(
-  decoded: DecodedImage,
-  format: OutputFormat,
-  quality: number,
-  mimeType: string,
-): Promise<Blob> {
-  if (typeof document === "undefined") {
-    throw new UnsupportedFormatError("Browser conversion requires a DOM canvas environment.");
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.width = decoded.width;
-  canvas.height = decoded.height;
-
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new ConversionError("Conversion failed while creating a canvas context.");
-  }
-
-  const { buffer, byteOffset, byteLength } = decoded.data;
-  const imageData = new ImageData(
-    new Uint8ClampedArray(buffer, byteOffset, byteLength),
-    decoded.width,
-    decoded.height,
-  );
-  context.putImageData(imageData, 0, 0);
-
-  const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, mimeType, quality);
-  });
-
-  if (!blob) {
-    if (format === "webp") {
-      throw new UnsupportedFormatError("WebP output is not supported in this environment.");
-    }
-
-    throw new ConversionError("Conversion failed while encoding image in the browser.");
-  }
-
-  assertBrowserOutputMimeType(blob, format, mimeType);
-
-  return blob;
 }
