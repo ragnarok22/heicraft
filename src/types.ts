@@ -12,6 +12,11 @@ export type DecodeOptions = InputOptions & {
   maxPixels?: number;
 };
 
+export type InfoOptions = DecodeOptions & {
+  /** Inspect pixels for non-opaque alpha values. Defaults to false (no RGBA decoding). */
+  inspectAlpha?: boolean;
+};
+
 export type ConvertOptions = DecodeOptions & {
   format?: OutputFormat;
   quality?: number;
@@ -50,6 +55,7 @@ export type HeicInfo = {
   mimeType?: HeicMimeType;
   brand?: string;
   imagesCount?: number;
+  /** Whether any pixel is non-opaque. Only populated when inspectAlpha is true. */
   hasAlpha?: boolean;
 };
 

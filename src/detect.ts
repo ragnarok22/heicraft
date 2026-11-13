@@ -1,5 +1,5 @@
 import type { HeicDetectionResult, HeicInput, InputOptions, NormalizedInput } from "./types";
-import { normalizeInput } from "./utils/input";
+import { type InputReader, withInputReader } from "./utils/input";
 import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from "./utils/mime";
 
 const hevcBrands = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis"]);
@@ -18,17 +18,23 @@ export async function detectHeic(
   input: HeicInput,
   options: InputOptions = {},
 ): Promise<HeicDetectionResult> {
-  const normalized = await normalizeInput(input, options);
-
-  return detectNormalizedHeic(normalized);
+  return withInputReader(input, options, async (reader) =>
+    createDetectionResult(await readHeifBrand(reader), reader),
+  );
 }
 
 export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetectionResult {
-  const brand = detectHeifBrand(normalized.bytes);
+  return createDetectionResult(detectHeifBrand(normalized.bytes), normalized);
+}
+
+function createDetectionResult(
+  brand: string | undefined,
+  input: { filename?: string; mimeType?: string },
+): HeicDetectionResult {
   const codec =
     brand && av1Brands.has(brand) ? "av1" : brand && hevcBrands.has(brand) ? "hevc" : undefined;
   const extension =
-    getHeicExtension(normalized.filename) ?? getHeicExtensionFromMimeType(normalized.mimeType);
+    getHeicExtension(input.filename) ?? getHeicExtensionFromMimeType(input.mimeType);
 
   return {
     isHeic: codec === "hevc",
@@ -41,27 +47,67 @@ export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetection
 }
 
 export function detectHeifBrand(bytes: Uint8Array): string | undefined {
+  const box = readFtypBox(bytes, bytes.byteLength);
+  if (!box) {
+    return undefined;
+  }
+
+  let brand = preferredBrand(undefined, readAscii(bytes, box.headerSize, box.headerSize + 4));
+  for (let offset = box.headerSize + 8; offset < box.end; offset += 4) {
+    brand = preferredBrand(brand, readAscii(bytes, offset, offset + 4));
+  }
+  return brand;
+}
+
+async function readHeifBrand(reader: InputReader): Promise<string | undefined> {
+  const header = await reader.read(0, Math.min(16, reader.size));
+  const box = readFtypBox(header, reader.size);
+  if (!box) {
+    return undefined;
+  }
+
+  const major = box.headerSize === 8 ? header.subarray(8) : await reader.read(16, 24);
+  if (major.byteLength !== 8) {
+    return undefined;
+  }
+  let brand = preferredBrand(undefined, readAscii(major, 0, 4));
+
+  // Every compatible brand matters: an AV1 brand may occur after a HEVC brand.
+  // Scan large (including size-zero) boxes in bounded, four-byte-aligned chunks.
+  for (let offset = box.headerSize + 8; offset < box.end; offset += 64 * 1024) {
+    const end = Math.min(offset + 64 * 1024, box.end);
+    const bytes = await reader.read(offset, end);
+    if (bytes.byteLength !== end - offset) {
+      return undefined;
+    }
+    for (let index = 0; index < bytes.byteLength; index += 4) {
+      brand = preferredBrand(brand, readAscii(bytes, index, index + 4));
+    }
+  }
+  return brand;
+}
+
+function readFtypBox(
+  bytes: Uint8Array,
+  inputSize: number,
+): { headerSize: number; end: number } | undefined {
   if (bytes.byteLength < 16 || readAscii(bytes, 4, 8) !== "ftyp") {
     return undefined;
   }
 
   const size32 = readUint32(bytes, 0);
   let headerSize = 8;
-  let boxEnd = bytes.byteLength;
+  let boxEnd = inputSize;
 
   if (size32 === 1) {
     headerSize = 16;
-    if (bytes.byteLength < 24) {
-      return undefined;
-    }
-
     const extendedSize = readUint64(bytes, 8);
-    if (extendedSize < 24n || extendedSize > BigInt(bytes.byteLength)) {
+    if (extendedSize < 24n || extendedSize > BigInt(inputSize)) {
       return undefined;
     }
     boxEnd = Number(extendedSize);
   } else if (size32 !== 0) {
-    if (size32 < 16 || size32 > bytes.byteLength) {
+    if (size32 < 16 || size32 > inputSize) {
       return undefined;
     }
     boxEnd = size32;
@@ -71,19 +117,17 @@ export function detectHeifBrand(bytes: Uint8Array): string | undefined {
     return undefined;
   }
 
-  const brands: string[] = [readAscii(bytes, headerSize, headerSize + 4)];
+  return { headerSize, end: boxEnd };
+}
 
-  for (let offset = headerSize + 8; offset + 4 <= boxEnd; offset += 4) {
-    brands.push(readAscii(bytes, offset, offset + 4));
-  }
-
+function preferredBrand(current: string | undefined, candidate: string): string | undefined {
   // A generic HEIF container brand does not identify its codec. Prefer explicit
   // codec brands, rejecting AV1 even when HEVC or metadata hints are also present.
-  return (
-    brands.find((brand) => av1Brands.has(brand)) ??
-    brands.find((brand) => hevcBrands.has(brand)) ??
-    brands.find((brand) => heifBrands.has(brand))
-  );
+  if (current && av1Brands.has(current)) return current;
+  if (av1Brands.has(candidate)) return candidate;
+  if (current && hevcBrands.has(current)) return current;
+  if (hevcBrands.has(candidate)) return candidate;
+  return current ?? (heifBrands.has(candidate) ? candidate : undefined);
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {
@@ -100,5 +144,5 @@ function readUint64(bytes: Uint8Array, offset: number): bigint {
 }
 
 function readAscii(bytes: Uint8Array, start: number, end: number): string {
-  return String.fromCharCode(...bytes.slice(start, end));
+  return String.fromCharCode(...bytes.subarray(start, end));
 }

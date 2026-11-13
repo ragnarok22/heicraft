@@ -142,6 +142,8 @@ Return detailed HEIC/HEIF detection information.
 
 Accepts `InputOptions` to configure `maxInputBytes` and throws `ResourceLimitError` if exceeded. Detection does not decode pixels, so `maxPixels` does not apply.
 
+Blob/File inputs use bounded slices and Node.js paths use partial reads: only the header and compatible brands of `ftyp` are read, not the image payload. All compatible brands are checked, including those beyond the first chunk. An `ftyp` with size zero extends to EOF and therefore requires scanning the remaining input, still in bounded chunks. In-memory buffers use views without copying their contents. The byte limit applies to the entire input, not just the bytes inspected.
+
 ```ts
 type HeicDetectionResult = {
   isHeic: boolean;
@@ -182,13 +184,26 @@ type HeicInfo = {
 };
 ```
 
-For the MVP, metadata is intentionally basic. Width, height, and alpha information require the decoder to successfully decode the primary image.
+Width, height, and the count of top-level images are read from libheif's image handles without decoding pixels or allocating RGBA. The current backend still requires the complete compressed input in memory; this is not a streaming metadata reader. Signature-derived information remains available if backend parsing fails.
 
-Accepts `DecodeOptions` with the same byte and pixel limits as conversion. Resource-limit errors are propagated, not replaced with partial metadata.
+Accepts the exported `InfoOptions` type, extending `DecodeOptions` with optional transparency inspection:
+
+```ts
+type InfoOptions = DecodeOptions & {
+  inspectAlpha?: boolean; // defaults to false
+};
+
+const info = await getHeicInfo(file); // dimensions and image count, no RGBA
+const withAlpha = await getHeicInfo(file, { inspectAlpha: true });
+```
+
+**`hasAlpha` is omitted by default.** Set `inspectAlpha: true` to check for non-opaque pixels. An alpha channel can be entirely opaque, so channel presence alone is not reported as transparency. If the backend confirms there is no alpha channel, `hasAlpha` is `false` without rendering; otherwise opt-in inspection decodes RGBA and scans the alpha values.
+
+The same byte and pixel limits as conversion apply, even without rendering. Resource-limit errors are propagated, not replaced with partial metadata.
 
 ## Resource Limits
 
-All entry points default to a maximum input size of **20 MiB**. Conversion and metadata inspection also default to **25 million pixels** for the image being decoded. A 48-megapixel image is rejected by default before allocating its RGBA buffer.
+All entry points default to a maximum input size of **20 MiB**. Conversion and metadata inspection also default to **25 million pixels** for the image being inspected. A 48-megapixel image is rejected by default, including metadata-only queries, before any RGBA allocation.
 
 Both limits accept positive safe integers only; `0`, negative or fractional values, `NaN`, and `Infinity` are invalid. An input or pixel count exactly equal to the configured limit is allowed. Override the limits per call when larger images are expected:
 
@@ -199,7 +214,7 @@ const result = await convertHeic("./photo.heic", {
 });
 ```
 
-Blob/File sizes are checked before `arrayBuffer()`. Node.js paths are checked on the opened file, then read with a byte cap even if the file grows. For buffers already in memory, the limit applies to the supplied view's byte length; it cannot undo allocations made by the caller. Pass a file path directly instead of calling `readFile()` yourself when you need the library to bound file reading.
+Blob/File sizes are checked before reading any bytes. Node.js paths are checked on the opened file; full reads are byte-capped even if the file grows, and partial detection rechecks the file size before returning. For buffers already in memory, the limit applies to the supplied view's byte length; it cannot undo allocations made by the caller. Pass a file path directly instead of calling `readFile()` yourself when you need the library to bound file reading.
 
 Dimensions are checked on libheif's image handle before allocating RGBA or rendering pixels. These limits are **not a total memory or CPU budget**: parsing, native decoding, encoding, and concurrent calls can use additional resources. Isolate untrusted workloads and limit concurrency where appropriate.
 

@@ -4,6 +4,58 @@ import type { HeicInput, InputOptions, NormalizedInput } from "../types";
 import { isBlobLike, isFileLike, isNodeEnvironment } from "./environment";
 import { assertInputSize, resolveMaxInputBytes } from "./limits";
 
+export type InputReader = {
+  size: number;
+  filename?: string;
+  mimeType?: string;
+  read(start: number, end: number): Promise<Uint8Array>;
+};
+
+/** Inspect ranges without materializing the entire input. File handles stay local to the call. */
+export async function withInputReader<T>(
+  input: HeicInput,
+  options: InputOptions,
+  inspect: (reader: InputReader) => Promise<T>,
+): Promise<T> {
+  const maxInputBytes = resolveMaxInputBytes(options.maxInputBytes);
+
+  if (typeof input === "string") {
+    return withInputFile(input, maxInputBytes, async (file, size) => {
+      const result = await inspect({
+        size,
+        filename: input.split(/[\\/]/).at(-1),
+        read: (start, end) => readFileRange(file, start, Math.min(end, size)),
+      });
+      // Partial inspection must not silently accept growth beyond the input limit.
+      assertInputSize((await file.stat()).size, maxInputBytes);
+      return result;
+    });
+  }
+
+  if (isBlobLike(input)) {
+    assertInputSize(input.size, maxInputBytes);
+    return inspect({
+      size: input.size,
+      filename: isFileLike(input) ? input.name : undefined,
+      mimeType: input.type || undefined,
+      async read(start, end) {
+        try {
+          return new Uint8Array(await input.slice(start, end).arrayBuffer());
+        } catch {
+          throw new InvalidInputError("Unable to read Blob input.");
+        }
+      },
+    });
+  }
+
+  const normalized = await normalizeInput(input, options);
+  return inspect({
+    ...normalized,
+    size: normalized.bytes.byteLength,
+    read: async (start, end) => normalized.bytes.subarray(start, end),
+  });
+}
+
 export async function normalizeInput(
   input: HeicInput,
   options: InputOptions = {},
@@ -54,6 +106,17 @@ async function normalizeFilePath(
   filePath: string,
   maxInputBytes: number,
 ): Promise<NormalizedInput> {
+  const bytes = await withInputFile(filePath, maxInputBytes, (file) =>
+    readBoundedFile(file, maxInputBytes),
+  );
+  return { bytes, filename: filePath.split(/[\\/]/).at(-1) };
+}
+
+async function withInputFile<T>(
+  filePath: string,
+  maxInputBytes: number,
+  read: (file: FileHandle, size: number) => Promise<T>,
+): Promise<T> {
   if (!isNodeEnvironment()) {
     throw new InvalidInputError("String file paths are only supported in Node.js.");
   }
@@ -63,7 +126,6 @@ async function normalizeFilePath(
   }
 
   const { open } = await import("node:fs/promises");
-  let bytes: Uint8Array;
   try {
     const file = await open(filePath, "r");
     try {
@@ -72,7 +134,7 @@ async function normalizeFilePath(
         throw new InvalidInputError("Input file path must refer to a regular file.");
       }
       assertInputSize(stats.size, maxInputBytes);
-      bytes = await readBoundedFile(file, maxInputBytes);
+      return await read(file, stats.size);
     } finally {
       await file.close();
     }
@@ -82,12 +144,19 @@ async function normalizeFilePath(
     }
     throw new InvalidInputError(`Unable to read input file: ${filePath}`);
   }
-  const filename = filePath.split(/[\\/]/).at(-1);
+}
 
-  return {
-    bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-    filename,
-  };
+async function readFileRange(file: FileHandle, start: number, end: number): Promise<Uint8Array> {
+  const bytes = new Uint8Array(end - start);
+  let total = 0;
+  while (total < bytes.byteLength) {
+    const { bytesRead } = await file.read(bytes, total, bytes.byteLength - total, start + total);
+    if (bytesRead === 0) {
+      break;
+    }
+    total += bytesRead;
+  }
+  return bytes.subarray(0, total);
 }
 
 async function readBoundedFile(file: FileHandle, maxInputBytes: number): Promise<Uint8Array> {

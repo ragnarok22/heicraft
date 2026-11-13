@@ -20,10 +20,26 @@ export function createFtypBytes(
 
 export class CountingBlob extends Blob {
   reads = 0;
+  bytesRead = 0;
+  slices: [number, number][] = [];
 
   override async arrayBuffer(): Promise<ArrayBuffer> {
     this.reads += 1;
-    return super.arrayBuffer();
+    const buffer = await super.arrayBuffer();
+    this.bytesRead += buffer.byteLength;
+    return buffer;
+  }
+
+  override slice(start = 0, end = this.size, contentType?: string): Blob {
+    this.slices.push([start, end]);
+    const slice = super.slice(start, end, contentType);
+    const arrayBuffer = slice.arrayBuffer.bind(slice);
+    slice.arrayBuffer = async () => {
+      const buffer = await arrayBuffer();
+      this.bytesRead += buffer.byteLength;
+      return buffer;
+    };
+    return slice;
   }
 }
 

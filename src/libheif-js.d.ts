@@ -8,6 +8,7 @@ declare module "libheif-js/wasm-bundle.js" {
   export type HeifImage = {
     get_width(): number;
     get_height(): number;
+    has_alpha_channel(): boolean;
     display(image: HeifImageData, callback: (image: HeifImageData | null) => void): void;
     free(): void;
   };

@@ -19,6 +19,36 @@ describe("detectHeic", () => {
     });
   });
 
+  it("reads only ftyp from a 16 MiB Blob", async () => {
+    const header = createFtypBytes("heic", ["mif1"]);
+    const blob = new CountingBlob([header, new Uint8Array(16 * 1024 * 1024 - header.length)]);
+
+    await expect(detectHeic(blob)).resolves.toMatchObject({ isHeic: true });
+
+    expect(blob.reads).toBe(0);
+    expect(blob.bytesRead).toBe(header.byteLength);
+  });
+
+  it.each([false, true])(
+    "scans late compatible brands in bounded chunks (size zero: %s)",
+    async (zeroSize) => {
+      const brands = Array<string>(16_385).fill("mif1");
+      brands[0] = "heic";
+      brands[brands.length - 1] = "avif";
+      const header = createFtypBytes("mif1", brands);
+      if (zeroSize) header.fill(0, 0, 4);
+      const blob = new CountingBlob([header]);
+
+      await expect(detectHeic(blob)).resolves.toMatchObject({
+        isHeic: false,
+        codec: "av1",
+        brand: "avif",
+      });
+      expect(blob.bytesRead).toBe(header.byteLength);
+      expect(blob.slices.every(([start, end]) => end - start <= 64 * 1024)).toBe(true);
+    },
+  );
+
   it.each(["mif1", "msf1"])(
     "distinguishes a %s container from a confirmed HEVC signature",
     async (brand) => {
@@ -118,6 +148,8 @@ describe("detectHeic", () => {
     await expect(detectHeic(blob, options)).rejects.toBeInstanceOf(ResourceLimitError);
     await expect(isHeic(blob, options)).resolves.toBe(false);
     expect(blob.reads).toBe(0);
+    expect(blob.bytesRead).toBe(0);
+    expect(blob.slices).toEqual([]);
 
     await expect(isHeic(blob, { maxInputBytes: blob.size })).resolves.toBe(true);
   });
@@ -168,6 +200,56 @@ describe("detectHeic", () => {
       brand: "heix",
       mimeType: "image/heic",
     });
+    const blob = new CountingBlob([bytes, new Uint8Array(1024)]);
+    await expect(detectHeic(blob)).resolves.toMatchObject({ isHeic: true, brand: "heix" });
+    expect(blob.bytesRead).toBe(bytes.byteLength);
+  });
+
+  it.each([23n, 25n, 33n, (1n << 64n) - 1n])(
+    "rejects invalid extended-size ftyp lengths (%s) without reading the payload",
+    async (size) => {
+      const bytes = new Uint8Array(32);
+      new DataView(bytes.buffer).setUint32(0, 1);
+      bytes.set([102, 116, 121, 112], 4);
+      new DataView(bytes.buffer).setBigUint64(8, size);
+      const blob = new CountingBlob([bytes]);
+
+      await expect(detectHeic(blob)).resolves.toMatchObject({ isHeic: false });
+      expect(blob.bytesRead).toBe(16);
+    },
+  );
+
+  it("does not read a declared ftyp body beyond the input size", async () => {
+    const bytes = createFtypBytes("heic");
+    bytes[3] += 4;
+    const blob = new CountingBlob([bytes]);
+
+    await expect(detectHeic(blob)).resolves.toMatchObject({ isHeif: false });
+    expect(blob.bytesRead).toBe(16);
+  });
+
+  it("wraps failures while reading Blob slices", async () => {
+    class UnreadableBlob extends Blob {
+      override slice(): Blob {
+        throw new Error("slice failed");
+      }
+    }
+
+    await expect(detectHeic(new UnreadableBlob([createFtypBytes("heic")]))).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+      message: "Unable to read Blob input.",
+    });
+  });
+
+  it("respects the offset and length of in-memory input views", async () => {
+    const header = createFtypBytes("heic");
+    const backing = new Uint8Array(header.byteLength + 16);
+    backing.set(header, 8);
+
+    await expect(
+      detectHeic(backing.subarray(8, 8 + header.byteLength), { maxInputBytes: header.byteLength }),
+    ).resolves.toMatchObject({ isHeic: true });
+    expect(backing.subarray(8, 8 + header.byteLength)).toEqual(header);
   });
 
   it("supports an ftyp box whose zero size extends to EOF", async () => {

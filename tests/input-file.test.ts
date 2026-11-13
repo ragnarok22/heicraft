@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { detectHeic } from "../src";
 import { normalizeInput } from "../src/utils/input";
+import { createFtypBytes } from "./helpers";
 
 const file = vi.hoisted(() => ({
   stat: vi.fn(),
@@ -91,15 +93,71 @@ describe("bounded file input", () => {
     expect(file.read).not.toHaveBeenCalled();
     expect(file.close).toHaveBeenCalledOnce();
   });
+
+  it("detects a large file by reading only ftyp, including partial reads", async () => {
+    const header = createFtypBytes("heic", ["mif1"]);
+    mockFile(header, 16 * 1024 * 1024, 3);
+
+    await expect(detectHeic("photo.heic")).resolves.toMatchObject({ isHeic: true });
+
+    expect(file.read.mock.calls.length).toBeGreaterThan(2);
+    for (const [, , length, position] of file.read.mock.calls) {
+      expect(position + length).toBeLessThanOrEqual(header.byteLength);
+    }
+    expect(open).toHaveBeenCalledExactlyOnceWith("photo.heic", "r");
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects oversized paths before reading even for partial detection", async () => {
+    const header = createFtypBytes("heic");
+    mockFile(header, 100);
+
+    await expect(detectHeic("photo.heic", { maxInputBytes: 99 })).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(file.read).not.toHaveBeenCalled();
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("rechecks growth beyond the byte limit after partial detection", async () => {
+    const header = createFtypBytes("heic");
+    mockFile(header);
+    file.stat.mockResolvedValueOnce({ size: header.byteLength, isFile: () => true });
+    file.stat.mockResolvedValue({ size: header.byteLength + 1, isFile: () => true });
+
+    await expect(
+      detectHeic("photo.heic", { maxInputBytes: header.byteLength }),
+    ).rejects.toMatchObject({ code: "RESOURCE_LIMIT_EXCEEDED" });
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an ftyp truncated during partial detection", async () => {
+    const header = createFtypBytes("heic", ["mif1"]);
+    mockFile(header.subarray(0, 16), header.byteLength);
+
+    await expect(detectHeic("photo.heic")).resolves.toMatchObject({ isHeic: false });
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("closes the file if partial detection fails to read it", async () => {
+    mockFile(createFtypBytes("heic"));
+    file.read.mockRejectedValue(new Error("read failed"));
+
+    await expect(detectHeic("photo.heic")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(file.close).toHaveBeenCalledOnce();
+  });
 });
 
 function mockFile(data: Uint8Array, size = data.byteLength, maxRead = data.byteLength): void {
   file.stat.mockResolvedValue({ size, isFile: () => true });
   let position = 0;
-  file.read.mockImplementation(async (buffer: Uint8Array, offset: number, length: number) => {
-    const chunk = data.subarray(position, position + Math.min(length, maxRead));
-    buffer.set(chunk, offset);
-    position += chunk.byteLength;
-    return { bytesRead: chunk.byteLength, buffer };
-  });
+  file.read.mockImplementation(
+    async (buffer: Uint8Array, offset: number, length: number, readPosition: number | null) => {
+      const start = readPosition ?? position;
+      const chunk = data.subarray(start, start + Math.min(length, maxRead));
+      buffer.set(chunk, offset);
+      position = start + chunk.byteLength;
+      return { bytesRead: chunk.byteLength, buffer };
+    },
+  );
 }

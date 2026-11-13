@@ -41,6 +41,13 @@ describe("real HEIC conversion", () => {
 });
 
 describe("real HEIC decoding", () => {
+  it("returns basic metadata without inspecting transparency by default", async () => {
+    const info = await getHeicInfo(fixture);
+
+    expect(info).toMatchObject({ width: 32, height: 32, imagesCount: 1 });
+    expect(info).not.toHaveProperty("hasAlpha");
+  });
+
   it.each([
     ["conversion", convertHeic],
     ["metadata inspection", getHeicInfo],
@@ -86,7 +93,7 @@ describe("real HEIC decoding", () => {
       width: 32,
       height: 32,
     });
-    await expect(getHeicInfo(input)).resolves.toMatchObject({
+    await expect(getHeicInfo(input, { inspectAlpha: true })).resolves.toMatchObject({
       width: 32,
       height: 32,
       hasAlpha: false,

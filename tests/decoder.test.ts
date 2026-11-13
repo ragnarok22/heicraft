@@ -1,6 +1,6 @@
 import type { HeifImage } from "libheif-js/wasm-bundle.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { decodeHeic } from "../src/decoder";
+import { decodeHeic, readHeicMetadata } from "../src/decoder";
 
 const backend = vi.hoisted(() => ({
   decode: vi.fn(),
@@ -24,6 +24,99 @@ describe("libheif decoder adapter", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("reads dimensions and image count without allocating RGBA or rendering any image", async () => {
+    const first = mockImage();
+    const second = mockImage();
+    backend.decode.mockReturnValue([first, second]);
+    const allocate = vi.spyOn(globalThis, "Uint8ClampedArray").mockImplementation(() => {
+      throw new Error("RGBA must not be allocated.");
+    });
+    const bytes = new Uint8Array([1, 2, 3]);
+
+    await expect(readHeicMetadata(bytes)).resolves.toEqual({
+      width: 2,
+      height: 1,
+      imagesCount: 2,
+    });
+
+    expect(backend.decode).toHaveBeenCalledExactlyOnceWith(bytes);
+    expect(allocate).not.toHaveBeenCalled();
+    expect(first.display).not.toHaveBeenCalled();
+    expect(second.display).not.toHaveBeenCalled();
+    expect(first.free).toHaveBeenCalledOnce();
+    expect(second.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
+  it.each([
+    [8_000, 6_000, undefined],
+    [2, 1, 1],
+    [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+  ])(
+    "enforces metadata pixel limits for %s × %s without rendering",
+    async (width, height, limit) => {
+      const image = mockImage(width, height);
+      backend.decode.mockReturnValue([image]);
+
+      await expect(readHeicMetadata(new Uint8Array([1]), limit)).rejects.toMatchObject({
+        code: "RESOURCE_LIMIT_EXCEEDED",
+      });
+      expect(image.display).not.toHaveBeenCalled();
+      expect(image.free).toHaveBeenCalledOnce();
+      expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
+    },
+  );
+
+  it.each([
+    [255, false],
+    [128, true],
+    [0, true],
+  ])("inspects pixels only on request (alpha %s)", async (alpha, hasAlpha) => {
+    const image = mockImage();
+    image.display.mockImplementation((frame, callback) => {
+      frame.data.set([255, 0, 0, 255, 0, 255, 0, alpha]);
+      expect(image.free).not.toHaveBeenCalled();
+      expect(backend.freeContext).not.toHaveBeenCalled();
+      callback(frame);
+    });
+    backend.decode.mockReturnValue([image]);
+
+    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).resolves.toEqual({
+      width: 2,
+      height: 1,
+      imagesCount: 1,
+      hasAlpha,
+    });
+    expect(backend.decode).toHaveBeenCalledOnce();
+    expect(image.display).toHaveBeenCalledOnce();
+    expect(image.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
+  it("skips rendering even on opt-in when the backend rules out an alpha channel", async () => {
+    const image = mockImage();
+    image.has_alpha_channel.mockReturnValue(false);
+    backend.decode.mockReturnValue([image]);
+
+    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).resolves.toMatchObject({
+      hasAlpha: false,
+    });
+    expect(image.display).not.toHaveBeenCalled();
+    expect(image.free).toHaveBeenCalledOnce();
+  });
+
+  it("releases handles if optional alpha rendering fails", async () => {
+    const image = mockImage();
+    image.display.mockImplementation((_frame, callback) => callback(null));
+    backend.decode.mockReturnValue([image]);
+
+    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).rejects.toThrow(
+      "HEIF processing error",
+    );
+    expect(image.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
   });
 
   it.each([
@@ -161,6 +254,7 @@ function mockImage(width = 2, height = 1) {
   return {
     get_width: () => width,
     get_height: () => height,
+    has_alpha_channel: vi.fn(() => true),
     display: vi.fn<HeifImage["display"]>(),
     free: vi.fn(),
   };

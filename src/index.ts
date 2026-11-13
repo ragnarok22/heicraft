@@ -1,6 +1,5 @@
 export { convertHeic } from "./convert";
 export { detectHeic, isHeic } from "./detect";
-export { getHeicInfo } from "./info";
 export {
   AbortError,
   ConversionError,
@@ -9,6 +8,7 @@ export {
   ResourceLimitError,
   UnsupportedFormatError,
 } from "./errors";
+export { getHeicInfo } from "./info";
 export type {
   ConvertOptions,
   ConvertResult,
@@ -18,6 +18,7 @@ export type {
   HeicInfo,
   HeicInput,
   HeicMimeType,
+  InfoOptions,
   InputOptions,
   OutputFormat,
 } from "./types";
