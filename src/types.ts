@@ -2,7 +2,17 @@ export type HeicInput = File | Blob | ArrayBuffer | Uint8Array | string;
 
 export type OutputFormat = "jpeg" | "png" | "webp";
 
-export type ConvertOptions = {
+export type InputOptions = {
+  /** Maximum input size in bytes. Defaults to 20 MiB (20 * 1024 * 1024). */
+  maxInputBytes?: number;
+};
+
+export type DecodeOptions = InputOptions & {
+  /** Maximum pixel count of the image being decoded. Defaults to 25,000,000. */
+  maxPixels?: number;
+};
+
+export type ConvertOptions = DecodeOptions & {
   format?: OutputFormat;
   quality?: number;
   filename?: string;

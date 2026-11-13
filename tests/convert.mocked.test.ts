@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createFtypBytes } from "./helpers";
+import { CountingBlob, createFtypBytes } from "./helpers";
 
 const decodedImage = {
   width: 1,
@@ -142,6 +142,20 @@ describe("convertHeic with mocked backends", () => {
 
     expect(result.data).toBe(blob);
     expect(result.mimeType).toBe("image/jpeg");
+  });
+
+  it("rejects oversized browser input before reading or creating a canvas", async () => {
+    mockBrowserEnvironment();
+    const { convertHeic } = await importBrowserConvert();
+    const blob = new CountingBlob([createFtypBytes("heic")]);
+    const createElement = vi.fn();
+    vi.stubGlobal("document", { createElement });
+
+    await expect(convertHeic(blob, { maxInputBytes: blob.size - 1 })).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(blob.reads).toBe(0);
+    expect(createElement).not.toHaveBeenCalled();
   });
 
   it("rejects browser conversion without a DOM canvas", async () => {

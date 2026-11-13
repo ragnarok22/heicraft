@@ -1,7 +1,9 @@
 import type { HeifImage } from "libheif-js/wasm-bundle";
 import type { DecodedImage } from "./types";
+import { assertPixelCount, resolveMaxPixels } from "./utils/limits";
 
-export async function decodeHeic(bytes: Uint8Array): Promise<DecodedImage> {
+export async function decodeHeic(bytes: Uint8Array, maxPixels?: number): Promise<DecodedImage> {
+  const pixelLimit = resolveMaxPixels(maxPixels);
   const { default: libheif } = await import("libheif-js/wasm-bundle");
   await libheif.ready;
 
@@ -19,6 +21,7 @@ export async function decodeHeic(bytes: Uint8Array): Promise<DecodedImage> {
 
     const width = image.get_width();
     const height = image.get_height();
+    assertPixelCount(width, height, pixelLimit);
     const data = new Uint8ClampedArray(width * height * 4);
 
     // Rendering is asynchronous; keep the native handles alive until it completes.

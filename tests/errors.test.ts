@@ -4,6 +4,7 @@ import {
   ConversionError,
   HeicraftError,
   InvalidInputError,
+  ResourceLimitError,
   UnsupportedFormatError,
 } from "../src";
 
@@ -11,6 +12,8 @@ describe("custom errors", () => {
   it("exposes typed custom errors with stable codes", () => {
     expect(new InvalidInputError()).toBeInstanceOf(HeicraftError);
     expect(new InvalidInputError().code).toBe("INVALID_INPUT");
+    expect(new ResourceLimitError()).toBeInstanceOf(HeicraftError);
+    expect(new ResourceLimitError().code).toBe("RESOURCE_LIMIT_EXCEEDED");
     expect(new UnsupportedFormatError().code).toBe("UNSUPPORTED_FORMAT");
     expect(new ConversionError().code).toBe("CONVERSION_ERROR");
     expect(new AbortError().code).toBe("ABORT_ERROR");

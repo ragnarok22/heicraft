@@ -1,5 +1,5 @@
 import type { HeifImage } from "libheif-js/wasm-bundle";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeHeic } from "../src/decoder";
 
 const backend = vi.hoisted(() => ({
@@ -20,6 +20,68 @@ vi.mock("libheif-js/wasm-bundle", () => ({
 describe("libheif decoder adapter", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    [8_000, 6_000, undefined],
+    [2, 1, 1],
+    [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER],
+  ])("rejects %s × %s before allocating RGBA or rendering", async (width, height, maxPixels) => {
+    const first = mockImage(width, height);
+    const second = mockImage();
+    backend.decode.mockReturnValue([first, second]);
+    const allocate = vi.spyOn(globalThis, "Uint8ClampedArray").mockImplementation(() => {
+      throw new Error("RGBA must not be allocated.");
+    });
+
+    await expect(decodeHeic(new Uint8Array([1]), maxPixels)).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(allocate).not.toHaveBeenCalled();
+    expect(first.display).not.toHaveBeenCalled();
+    expect(first.free).toHaveBeenCalledOnce();
+    expect(second.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
+  it("accepts the exact pixel limit", async () => {
+    const image = mockImage(2, 2);
+    image.display.mockImplementation((frame, callback) => callback(frame));
+    backend.decode.mockReturnValue([image]);
+
+    await expect(decodeHeic(new Uint8Array([1]), 4)).resolves.toMatchObject({
+      width: 2,
+      height: 2,
+      data: new Uint8ClampedArray(16),
+    });
+  });
+
+  it.each([
+    [0, 1],
+    [-1, 1],
+    [1, 0],
+    [1.5, 1],
+    [1, Number.NaN],
+    [Number.POSITIVE_INFINITY, 1],
+    [2 ** 53, 1],
+  ])("rejects invalid dimensions %s × %s before rendering", async (width, height) => {
+    const image = mockImage(width, height);
+    backend.decode.mockReturnValue([image]);
+    const allocate = vi.spyOn(globalThis, "Uint8ClampedArray").mockImplementation(() => {
+      throw new Error("RGBA must not be allocated.");
+    });
+
+    await expect(decodeHeic(new Uint8Array([1]))).rejects.toMatchObject({
+      code: "CONVERSION_ERROR",
+    });
+    expect(allocate).not.toHaveBeenCalled();
+    expect(image.display).not.toHaveBeenCalled();
+    expect(image.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
   });
 
   it("keeps all handles alive until rendering completes and passes bytes unchanged", async () => {
@@ -95,10 +157,10 @@ describe("libheif decoder adapter", () => {
   );
 });
 
-function mockImage() {
+function mockImage(width = 2, height = 1) {
   return {
-    get_width: () => 2,
-    get_height: () => 1,
+    get_width: () => width,
+    get_height: () => height,
     display: vi.fn<HeifImage["display"]>(),
     free: vi.fn(),
   };

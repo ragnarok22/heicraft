@@ -4,6 +4,7 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 import { InvalidInputError } from "../src";
+import { CountingBlob } from "./helpers";
 import { assertNonEmptyInput, normalizeInput } from "../src/utils/input";
 import {
   getHeicExtension,
@@ -35,6 +36,63 @@ describe("input utilities", () => {
     });
   });
 
+  it("rejects oversized Blobs before reading them", async () => {
+    const blob = new CountingBlob([new Uint8Array(4)]);
+
+    await expect(normalizeInput(blob, { maxInputBytes: 3 })).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(blob.reads).toBe(0);
+  });
+
+  it("enforces the default 20 MiB input limit before reading", async () => {
+    class OversizedBlob extends CountingBlob {
+      override get size(): number {
+        return 20 * 1024 * 1024 + 1;
+      }
+    }
+    const blob = new OversizedBlob([]);
+
+    await expect(normalizeInput(blob)).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(blob.reads).toBe(0);
+  });
+
+  it.each([
+    ["Blob", new Blob([new Uint8Array(4)])],
+    ["ArrayBuffer", new ArrayBuffer(4)],
+    ["Uint8Array", new Uint8Array(4)],
+    ["Buffer", Buffer.alloc(4)],
+  ])("accepts the exact byte limit and rejects larger %s inputs", async (_name, input) => {
+    await expect(normalizeInput(input, { maxInputBytes: 4 })).resolves.toMatchObject({
+      bytes: new Uint8Array(4),
+    });
+    await expect(normalizeInput(input, { maxInputBytes: 3 })).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+  });
+
+  it("limits the view rather than its backing buffer", async () => {
+    const input = new Uint8Array([1, 2, 3, 4]).subarray(1, 3);
+
+    await expect(normalizeInput(input, { maxInputBytes: 2 })).resolves.toEqual({
+      bytes: new Uint8Array([2, 3]),
+    });
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53, null, "4"])(
+    "rejects invalid maxInputBytes (%s) without reading",
+    async (maxInputBytes) => {
+      const blob = new CountingBlob([new Uint8Array(1)]);
+
+      await expect(
+        normalizeInput(blob, { maxInputBytes: maxInputBytes as number }),
+      ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      expect(blob.reads).toBe(0);
+    },
+  );
+
   it("wraps Blob read failures", async () => {
     class FailingBlob extends Blob {
       override arrayBuffer(): Promise<ArrayBuffer> {
@@ -61,6 +119,9 @@ describe("input utilities", () => {
     try {
       await writeFile(filePath, new Uint8Array([1, 2, 3]));
 
+      await expect(normalizeInput(filePath, { maxInputBytes: 2 })).rejects.toMatchObject({
+        code: "RESOURCE_LIMIT_EXCEEDED",
+      });
       await expect(normalizeInput(filePath)).resolves.toEqual({
         bytes: new Uint8Array([1, 2, 3]),
         filename: "photo.heic",

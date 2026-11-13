@@ -1,4 +1,4 @@
-import type { HeicDetectionResult, HeicInput, NormalizedInput } from "./types";
+import type { HeicDetectionResult, HeicInput, InputOptions, NormalizedInput } from "./types";
 import { normalizeInput } from "./utils/input";
 import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from "./utils/mime";
 
@@ -6,16 +6,19 @@ const hevcBrands = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis"]);
 const heifBrands = new Set(["mif1", "msf1"]);
 const av1Brands = new Set(["avif", "avis"]);
 
-export async function isHeic(input: HeicInput): Promise<boolean> {
+export async function isHeic(input: HeicInput, options: InputOptions = {}): Promise<boolean> {
   try {
-    return (await detectHeic(input)).isHeic;
+    return (await detectHeic(input, options)).isHeic;
   } catch {
     return false;
   }
 }
 
-export async function detectHeic(input: HeicInput): Promise<HeicDetectionResult> {
-  const normalized = await normalizeInput(input);
+export async function detectHeic(
+  input: HeicInput,
+  options: InputOptions = {},
+): Promise<HeicDetectionResult> {
+  const normalized = await normalizeInput(input, options);
 
   return detectNormalizedHeic(normalized);
 }

@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { detectHeic, isHeic } from "../src";
-import { createFtypBytes } from "./helpers";
+import { detectHeic, isHeic, ResourceLimitError } from "../src";
+import { CountingBlob, createFtypBytes } from "./helpers";
 
 describe("detectHeic", () => {
   it("detects valid HEIC from the ftyp major brand", async () => {
@@ -109,6 +109,17 @@ describe("detectHeic", () => {
 
   it("returns false when input normalization fails", async () => {
     await expect(isHeic(null as never)).resolves.toBe(false);
+  });
+
+  it("applies byte limits to both detection APIs before reading", async () => {
+    const blob = new CountingBlob([createFtypBytes("heic")]);
+    const options = { maxInputBytes: blob.size - 1 };
+
+    await expect(detectHeic(blob, options)).rejects.toBeInstanceOf(ResourceLimitError);
+    await expect(isHeic(blob, options)).resolves.toBe(false);
+    expect(blob.reads).toBe(0);
+
+    await expect(isHeic(blob, { maxInputBytes: blob.size })).resolves.toBe(true);
   });
 
   it("rejects malformed ftyp boxes instead of scanning past the box", async () => {

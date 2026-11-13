@@ -83,7 +83,15 @@ String file paths are only supported in Node.js.
 Convert one HEIC/HEIF image to JPEG, PNG, or WebP.
 
 ```ts
-type ConvertOptions = {
+type InputOptions = {
+  maxInputBytes?: number;
+};
+
+type DecodeOptions = InputOptions & {
+  maxPixels?: number;
+};
+
+type ConvertOptions = DecodeOptions & {
   format?: "jpeg" | "png" | "webp";
   quality?: number;
   filename?: string;
@@ -102,16 +110,19 @@ Defaults:
 
 - `format`: `jpeg`
 - `quality`: `0.92`
+- `maxInputBytes`: `20 * 1024 * 1024` (20 MiB)
+- `maxPixels`: `25_000_000` (25 megapixels)
 
 Behavior:
 
 - Returns a `Blob` in browser environments when possible.
 - Returns `Uint8Array` data in Node.js.
 - Validates `quality` as a number between `0` and `1`.
+- Enforces input size before reading a Blob or file and pixel count before allocating RGBA.
 - Supports `AbortSignal` before conversion and after major async steps.
 - Throws typed custom errors for invalid input, unsupported output, aborts, and conversion failures.
 
-### `isHeic(input)`
+### `isHeic(input, options?)`
 
 Return `true` only when the binary signature identifies HEVC-based HEIC/HEIF.
 
@@ -123,9 +134,13 @@ Detection inspects the ISO BMFF `ftyp` box and requires a HEVC-specific brand su
 
 Filename extensions and MIME types are hints only: empty files or JPEGs renamed to `.heic` return `false`. Conversion and metadata inspection use the same signature requirement. Detection does not decode the image or guarantee successful conversion; corrupt payloads and unsupported codec profiles may still fail in the decoder.
 
-### `detectHeic(input)`
+Accepts `InputOptions` to configure `maxInputBytes`. Like other input failures, exceeding the byte limit returns `false`; use `detectHeic` if you need the error.
+
+### `detectHeic(input, options?)`
 
 Return detailed HEIC/HEIF detection information.
+
+Accepts `InputOptions` to configure `maxInputBytes` and throws `ResourceLimitError` if exceeded. Detection does not decode pixels, so `maxPixels` does not apply.
 
 ```ts
 type HeicDetectionResult = {
@@ -152,7 +167,7 @@ if (result.isHeic) {
 }
 ```
 
-### `getHeicInfo(input)`
+### `getHeicInfo(input, options?)`
 
 Return basic image information when it can be determined reliably.
 
@@ -168,6 +183,25 @@ type HeicInfo = {
 ```
 
 For the MVP, metadata is intentionally basic. Width, height, and alpha information require the decoder to successfully decode the primary image.
+
+Accepts `DecodeOptions` with the same byte and pixel limits as conversion. Resource-limit errors are propagated, not replaced with partial metadata.
+
+## Resource Limits
+
+All entry points default to a maximum input size of **20 MiB**. Conversion and metadata inspection also default to **25 million pixels** for the image being decoded. A 48-megapixel image is rejected by default before allocating its RGBA buffer.
+
+Both limits accept positive safe integers only; `0`, negative or fractional values, `NaN`, and `Infinity` are invalid. An input or pixel count exactly equal to the configured limit is allowed. Override the limits per call when larger images are expected:
+
+```ts
+const result = await convertHeic("./photo.heic", {
+  maxInputBytes: 50 * 1024 * 1024,
+  maxPixels: 50_000_000,
+});
+```
+
+Blob/File sizes are checked before `arrayBuffer()`. Node.js paths are checked on the opened file, then read with a byte cap even if the file grows. For buffers already in memory, the limit applies to the supplied view's byte length; it cannot undo allocations made by the caller. Pass a file path directly instead of calling `readFile()` yourself when you need the library to bound file reading.
+
+Dimensions are checked on libheif's image handle before allocating RGBA or rendering pixels. These limits are **not a total memory or CPU budget**: parsing, native decoding, encoding, and concurrent calls can use additional resources. Isolate untrusted workloads and limit concurrency where appropriate.
 
 ## Supported Input Types
 
@@ -209,6 +243,7 @@ Custom errors:
 
 - `HeicraftError`
 - `InvalidInputError`
+- `ResourceLimitError` (`RESOURCE_LIMIT_EXCEEDED`)
 - `UnsupportedFormatError`
 - `ConversionError`
 - `AbortError`

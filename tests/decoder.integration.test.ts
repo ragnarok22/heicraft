@@ -1,11 +1,26 @@
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
-import { convertHeic, detectHeic, getHeicInfo } from "../src";
+import { convertHeic, detectHeic, getHeicInfo, ResourceLimitError } from "../src";
 
 const fixture = await readFile(new URL("./fixtures/pattern.heic", import.meta.url));
 
 describe("real HEIC decoding", () => {
+  it.each([
+    ["conversion", convertHeic],
+    ["metadata inspection", getHeicInfo],
+  ] as const)("enforces limits during %s and succeeds at the exact limits", async (_name, run) => {
+    await expect(run(fixture, { maxPixels: 32 * 32 - 1 })).rejects.toBeInstanceOf(
+      ResourceLimitError,
+    );
+    await expect(run(fixture, { maxInputBytes: fixture.byteLength - 1 })).rejects.toBeInstanceOf(
+      ResourceLimitError,
+    );
+    await expect(
+      run(fixture, { maxPixels: 32 * 32, maxInputBytes: fixture.byteLength }),
+    ).resolves.toBeDefined();
+  });
+
   it.each([
     { name: "the original header", majorBrand: undefined, extended: false },
     { name: "a compatible HEVC brand", majorBrand: "isom", extended: false },

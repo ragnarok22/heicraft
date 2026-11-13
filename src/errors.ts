@@ -14,6 +14,12 @@ export class InvalidInputError extends HeicraftError {
   }
 }
 
+export class ResourceLimitError extends HeicraftError {
+  constructor(message = "Input exceeds a configured resource limit.") {
+    super(message, "RESOURCE_LIMIT_EXCEEDED");
+  }
+}
+
 export class UnsupportedFormatError extends HeicraftError {
   constructor(message = "Output format must be jpeg, png, or webp.") {
     super(message, "UNSUPPORTED_FORMAT");

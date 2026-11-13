@@ -4,6 +4,7 @@ import {
   ConversionError,
   convertHeic,
   InvalidInputError,
+  ResourceLimitError,
   UnsupportedFormatError,
 } from "../src";
 import { decodeHeic } from "../src/decoder";
@@ -40,6 +41,38 @@ describe("convertHeic", () => {
 
   it("rejects empty input", async () => {
     await expect(convertHeic(new Uint8Array())).rejects.toBeInstanceOf(InvalidInputError);
+  });
+
+  it("rejects oversized input without reading or decoding", async () => {
+    const blob = new CountingBlob([createFtypBytes("heic")]);
+
+    await expect(convertHeic(blob, { maxInputBytes: blob.size - 1 })).rejects.toBeInstanceOf(
+      ResourceLimitError,
+    );
+    expect(blob.reads).toBe(0);
+    expect(decodeMock).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53, null, "4"])(
+    "rejects invalid maxPixels (%s) before reading",
+    async (maxPixels) => {
+      const blob = new CountingBlob([createFtypBytes("heic")]);
+
+      await expect(convertHeic(blob, { maxPixels: maxPixels as number })).rejects.toBeInstanceOf(
+        InvalidInputError,
+      );
+      expect(blob.reads).toBe(0);
+      expect(decodeMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("passes the configured pixel limit to the decoder and preserves limit errors", async () => {
+    const error = new ResourceLimitError("Too many pixels.");
+    decodeMock.mockRejectedValue(error);
+    const input = createFtypBytes("heic");
+
+    await expect(convertHeic(input, { maxPixels: 100 })).rejects.toBe(error);
+    expect(decodeMock).toHaveBeenCalledExactlyOnceWith(input, 100);
   });
 
   it("supports AbortSignal before conversion starts", async () => {

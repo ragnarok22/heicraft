@@ -1,6 +1,7 @@
 import {
   ConversionError,
   InvalidInputError,
+  ResourceLimitError,
   UnsupportedFormatError,
   throwIfAborted,
 } from "./errors";
@@ -9,6 +10,7 @@ import { detectNormalizedHeic } from "./detect";
 import type { ConvertOptions, ConvertResult, DecodedImage, HeicInput, OutputFormat } from "./types";
 import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
+import { resolveMaxPixels } from "./utils/limits";
 import { assertOutputFormat, getOutputMimeType, normalizeQuality } from "./utils/mime";
 
 export async function convertHeic(
@@ -20,9 +22,10 @@ export async function convertHeic(
   const format = options.format ?? "jpeg";
   assertOutputFormat(format);
   assertQuality(options.quality);
+  const maxPixels = resolveMaxPixels(options.maxPixels);
 
   const quality = options.quality ?? 0.92;
-  const normalized = await normalizeInput(input);
+  const normalized = await normalizeInput(input, options);
   assertNonEmptyInput(normalized.bytes);
   throwIfAborted(options.signal);
 
@@ -34,10 +37,14 @@ export async function convertHeic(
 
   let decoded: DecodedImage;
   try {
-    decoded = await decodeHeic(normalized.bytes);
+    decoded = await decodeHeic(normalized.bytes, maxPixels);
   } catch (error) {
     throwIfAborted(options.signal);
-    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
+    if (
+      error instanceof UnsupportedFormatError ||
+      error instanceof ConversionError ||
+      error instanceof ResourceLimitError
+    ) {
       throw error;
     }
     throw new ConversionError(
