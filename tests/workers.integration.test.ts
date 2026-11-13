@@ -1,10 +1,48 @@
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { AbortError } from "../src";
 import { createNodeWorker } from "../src/workers/node";
 import { DecoderPool } from "../src/workers/pool";
 
 describe("real worker interruption", () => {
+  it("does not inherit parent CLI flags that are invalid for worker threads", async () => {
+    const adapter = new URL("../src/workers/node.ts", import.meta.url).href;
+    const workerURL = `data:text/javascript,${encodeURIComponent(`
+      import { parentPort } from "node:worker_threads";
+      parentPort.on("message", () => {
+        parentPort.postMessage({ id: 1, ok: true, result: { width: 1 } });
+      });
+    `)}`;
+    const script = `
+      import { createNodeWorker } from ${JSON.stringify(adapter)};
+      const worker = createNodeWorker(new URL(${JSON.stringify(workerURL)}));
+      try {
+        await new Promise((resolve, reject) => {
+          worker.listen(resolve, reject);
+          worker.postMessage({ id: 1, operation: "metadata", bytes: new Uint8Array([1]) }, []);
+        });
+        console.log("worker-ok");
+      } finally {
+        await worker.terminate();
+      }
+    `;
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        "--max-old-space-size=128",
+        "--input-type",
+        "module",
+        "-e",
+        script,
+      ],
+      { timeout: 5_000 },
+    );
+    expect(stdout.trim()).toBe("worker-ok");
+  });
+
   it.each(["throw new Error('crashed')", "process.exit(0)"])(
     "reports a worker that exits before replying (%s)",
     async (failure) => {

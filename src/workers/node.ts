@@ -9,9 +9,8 @@ export function createNodeWorker(
 ): DecoderWorker {
   // Native type stripping also permits running the source adapter in development.
   const source = url.pathname.endsWith(".ts");
-  const execArgv = process.execArgv.filter((arg) => !arg.startsWith("--input-type"));
-  if (source) execArgv.push("--experimental-strip-types");
-  const worker = new Worker(url, { execArgv });
+  // Parent CLI flags such as --input-type or --max-old-space-size can be invalid for workers.
+  const worker = new Worker(url, { execArgv: source ? ["--experimental-strip-types"] : [] });
   return {
     postMessage: (request, transfers) => worker.postMessage(request, transfers),
     terminate: () => worker.terminate(),
@@ -36,4 +35,6 @@ export function createNodeWorker(
   };
 }
 
-function ignoreRetiredWorkerError(): void {}
+function ignoreRetiredWorkerError(): void {
+  // A retired worker no longer has a job to reject.
+}
