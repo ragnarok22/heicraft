@@ -21,7 +21,7 @@ For usage and API behavior, see the [README](./README.md). For released changes,
 - Cancellation during input reading, queueing, and active decoding.
 - Default input-byte and pixel-count limits, complete-operation admission limits, and typed errors.
 - Real-image integration tests, Vite/Chromium/WebKit smoke tests of the npm tarball,
-  and focused native smoke jobs for macOS and Windows.
+  and a focused native smoke job for Windows.
 - CI checks for formatting, linting, types, tests, and package builds.
 
 ### Maintenance Priorities

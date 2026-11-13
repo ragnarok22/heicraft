@@ -85,8 +85,8 @@ outputs with that browser and browser outputs with Sharp, checking file signatur
 dimensions, and the fixture's quadrant colors. No conversion backends are mocked,
 and a missing fixture or browser fails the check rather than skipping it. It also
 checks OffscreenCanvas encoding, the DOM fallback, worker cancellation, rotation,
-transparency, cross-realm inputs, and the worker-free detection entrypoint. Native
-smoke jobs exercise workers and encoders on macOS and Windows without repeating
+transparency, cross-realm inputs, and the worker-free detection entrypoint. The native
+smoke job exercises workers and encoders on Windows without repeating
 the full test suite. Use `pnpm test` for quick feedback without coverage; do not run
 both test commands unless there is a specific reason to repeat the suite.
 
