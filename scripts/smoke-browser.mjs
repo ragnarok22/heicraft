@@ -47,7 +47,7 @@ try {
     throw new Error("Browser smoke test could not find bundled JavaScript.");
   }
 
-  const forbidden = ["sharp/lib", "@img/sharp", "browser-external:node:fs/promises"];
+  const forbidden = ["sharp/lib", "@img/sharp", "browser-external:node:"];
   for (const script of scripts) {
     const contents = await readFile(script, "utf8");
     const match = forbidden.find((text) => contents.includes(text));
@@ -65,6 +65,25 @@ try {
   });
   browser = await chromium.launch();
   const page = await browser.newPage();
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.__workerStats = { created: 0, posted: 0, terminated: 0 };
+    window.Worker = class extends NativeWorker {
+      constructor(...args) {
+        super(...args);
+        window.__workerStats.created++;
+      }
+      postMessage(...args) {
+        super.postMessage(...args);
+        window.__workerStats.posted++;
+        if (window.__abortOnPost) queueMicrotask(window.__abortOnPost);
+      }
+      terminate() {
+        window.__workerStats.terminated++;
+        super.terminate();
+      }
+    };
+  });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto(server.resolvedUrls.local[0]);
@@ -79,6 +98,12 @@ try {
       );
     }),
   ]);
+  assert.deepEqual(
+    await page.evaluate(() => window.__workerStats),
+    { created: 1, posted: 3, terminated: 0 },
+    "Browser conversions must reuse a real decoder worker.",
+  );
+  await checkWorkerCancellation(page);
   assert.deepEqual(pageErrors, [], "Browser smoke test encountered uncaught page errors.");
 } finally {
   clearTimeout(conversionTimeout);
@@ -91,6 +116,33 @@ try {
       await rm(directory, { recursive: true, force: true });
     }
   }
+}
+
+async function checkWorkerCancellation(page) {
+  const stats = await page.evaluate(async (bytes) => {
+    const input = new Uint8Array(bytes);
+    const controller = new AbortController();
+    // Abort only once input reading has finished and the decoder job was posted.
+    window.__abortOnPost = () => controller.abort();
+    try {
+      await window.__heicraftConvertHeic(input, { signal: controller.signal });
+      throw new Error("Expected cancellation of the active decoder worker.");
+    } catch (error) {
+      if (error.code !== "ABORT_ERROR") throw error;
+    } finally {
+      window.__abortOnPost = undefined;
+    }
+    if (input.byteLength !== bytes.length || input.some((byte, index) => byte !== bytes[index])) {
+      throw new Error("Worker transfer detached or modified the caller's input.");
+    }
+    const recovered = await window.__heicraftConvertHeic(input);
+    if (!(recovered.data instanceof Blob) || recovered.data.size === 0) {
+      throw new Error("Browser conversion did not recover after worker cancellation.");
+    }
+    return window.__workerStats;
+  }, Array.from(fixture));
+  assert.deepEqual(stats, { created: 2, posted: 5, terminated: 1 });
+  console.log("Real browser worker cancellation and recovery passed.");
 }
 
 async function checkConversions(page) {

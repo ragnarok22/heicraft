@@ -1,5 +1,5 @@
 import type { FileHandle } from "node:fs/promises";
-import { InvalidInputError, ResourceLimitError } from "../errors";
+import { AbortError, InvalidInputError, ResourceLimitError, throwIfAborted } from "../errors";
 import type { HeicInput, InputOptions, NormalizedInput } from "../types";
 import { isBlobLike, isFileLike, isNodeEnvironment } from "./environment";
 import { assertInputSize, resolveMaxInputBytes } from "./limits";
@@ -17,66 +17,79 @@ export async function withInputReader<T>(
   options: InputOptions,
   inspect: (reader: InputReader) => Promise<T>,
 ): Promise<T> {
+  throwIfAborted(options.signal);
   const maxInputBytes = resolveMaxInputBytes(options.maxInputBytes);
 
   if (typeof input === "string") {
-    return withInputFile(input, maxInputBytes, async (file, size) => {
-      const result = await inspect({
-        size,
-        filename: input.split(/[\\/]/).at(-1),
-        read: (start, end) => readFileRange(file, start, Math.min(end, size)),
-      });
-      // Partial inspection must not silently accept growth beyond the input limit.
-      assertInputSize((await file.stat()).size, maxInputBytes);
-      return result;
-    });
+    return withInputFile(
+      input,
+      maxInputBytes,
+      async (file, size) => {
+        const result = await inspect({
+          size,
+          filename: input.split(/[\\/]/).at(-1),
+          read: (start, end) => readFileRange(file, start, Math.min(end, size), options.signal),
+        });
+        // Partial inspection must not silently accept growth beyond the input limit.
+        assertInputSize((await file.stat()).size, maxInputBytes);
+        throwIfAborted(options.signal);
+        return result;
+      },
+      options.signal,
+    );
   }
 
   if (isBlobLike(input)) {
     assertInputSize(input.size, maxInputBytes);
-    return inspect({
+    const result = await inspect({
       size: input.size,
       filename: isFileLike(input) ? input.name : undefined,
       mimeType: input.type || undefined,
       async read(start, end) {
+        throwIfAborted(options.signal);
         try {
-          return new Uint8Array(await input.slice(start, end).arrayBuffer());
-        } catch {
+          return await readBlob(input.slice(start, end), maxInputBytes, options.signal);
+        } catch (error) {
+          throwIfAborted(options.signal);
+          if (error instanceof ResourceLimitError) throw error;
           throw new InvalidInputError("Unable to read Blob input.");
         }
       },
     });
+    throwIfAborted(options.signal);
+    return result;
   }
 
   const normalized = await normalizeInput(input, options);
-  return inspect({
+  const result = await inspect({
     ...normalized,
     size: normalized.bytes.byteLength,
-    read: async (start, end) => normalized.bytes.subarray(start, end),
+    read: async (start, end) => {
+      throwIfAborted(options.signal);
+      return normalized.bytes.subarray(start, end);
+    },
   });
+  throwIfAborted(options.signal);
+  return result;
 }
 
 export async function normalizeInput(
   input: HeicInput,
   options: InputOptions = {},
 ): Promise<NormalizedInput> {
+  throwIfAborted(options.signal);
   const maxInputBytes = resolveMaxInputBytes(options.maxInputBytes);
   if (input == null) {
     throw new InvalidInputError("Input is required.");
   }
 
   if (typeof input === "string") {
-    return normalizeFilePath(input, maxInputBytes);
+    return normalizeFilePath(input, maxInputBytes, options.signal);
   }
 
   if (isBlobLike(input)) {
     assertInputSize(input.size, maxInputBytes);
-    let bytes: Uint8Array;
-    try {
-      bytes = new Uint8Array(await input.arrayBuffer());
-    } catch {
-      throw new InvalidInputError("Unable to read Blob input.");
-    }
+    const bytes = await readBlob(input, maxInputBytes, options.signal);
     assertInputSize(bytes.byteLength, maxInputBytes);
     return {
       bytes,
@@ -105,9 +118,16 @@ export async function normalizeInput(
 async function normalizeFilePath(
   filePath: string,
   maxInputBytes: number,
+  signal?: AbortSignal,
 ): Promise<NormalizedInput> {
-  const bytes = await withInputFile(filePath, maxInputBytes, (file) =>
-    readBoundedFile(file, maxInputBytes),
+  const bytes = await withInputFile(
+    filePath,
+    maxInputBytes,
+    (file) =>
+      signal
+        ? readFileStream(file, 0, maxInputBytes, maxInputBytes, signal)
+        : readBoundedFile(file, maxInputBytes),
+    signal,
   );
   return { bytes, filename: filePath.split(/[\\/]/).at(-1) };
 }
@@ -116,7 +136,9 @@ async function withInputFile<T>(
   filePath: string,
   maxInputBytes: number,
   read: (file: FileHandle, size: number) => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
+  throwIfAborted(signal);
   if (!isNodeEnvironment()) {
     throw new InvalidInputError("String file paths are only supported in Node.js.");
   }
@@ -126,19 +148,25 @@ async function withInputFile<T>(
   }
 
   const { open } = await import("node:fs/promises");
+  throwIfAborted(signal);
   try {
     const file = await open(filePath, "r");
     try {
+      throwIfAborted(signal);
       const stats = await file.stat();
+      throwIfAborted(signal);
       if (!stats.isFile()) {
         throw new InvalidInputError("Input file path must refer to a regular file.");
       }
       assertInputSize(stats.size, maxInputBytes);
-      return await read(file, stats.size);
+      const result = await read(file, stats.size);
+      throwIfAborted(signal);
+      return result;
     } finally {
       await file.close();
     }
   } catch (error) {
+    throwIfAborted(signal);
     if (error instanceof InvalidInputError || error instanceof ResourceLimitError) {
       throw error;
     }
@@ -146,17 +174,107 @@ async function withInputFile<T>(
   }
 }
 
-async function readFileRange(file: FileHandle, start: number, end: number): Promise<Uint8Array> {
+async function readFileRange(
+  file: FileHandle,
+  start: number,
+  end: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  throwIfAborted(signal);
+  if (end <= start) return new Uint8Array();
   const bytes = new Uint8Array(end - start);
   let total = 0;
   while (total < bytes.byteLength) {
+    throwIfAborted(signal);
     const { bytesRead } = await file.read(bytes, total, bytes.byteLength - total, start + total);
+    throwIfAborted(signal);
     if (bytesRead === 0) {
       break;
     }
     total += bytesRead;
   }
   return bytes.subarray(0, total);
+}
+
+async function readFileStream(
+  file: FileHandle,
+  start: number,
+  end: number,
+  maxInputBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array> {
+  throwIfAborted(signal);
+  // end is inclusive: full reads allow at most one byte beyond the configured cap.
+  const stream = file.createReadStream({
+    start,
+    end,
+    highWaterMark: Math.min(64 * 1024, end - start + 1),
+    autoClose: false,
+    signal,
+  });
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for await (const chunk of stream) {
+      throwIfAborted(signal);
+      total += chunk.byteLength;
+      assertInputSize(total, maxInputBytes);
+      chunks.push(chunk);
+    }
+    throwIfAborted(signal);
+    return joinChunks(chunks, total);
+  } finally {
+    stream.destroy();
+  }
+}
+
+async function readBlob(
+  input: Blob,
+  maxInputBytes: number,
+  signal?: AbortSignal,
+): Promise<Uint8Array> {
+  throwIfAborted(signal);
+  try {
+    if (!signal) return new Uint8Array(await input.arrayBuffer());
+    const reader = input.stream().getReader();
+    const abort = () => {
+      void reader.cancel(new AbortError()).catch(() => {});
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      if (signal.aborted) abort();
+      while (true) {
+        throwIfAborted(signal);
+        const { done, value } = await reader.read();
+        throwIfAborted(signal);
+        if (done) break;
+        total += value.byteLength;
+        assertInputSize(total, maxInputBytes);
+        chunks.push(value);
+      }
+      return joinChunks(chunks, total);
+    } finally {
+      signal.removeEventListener("abort", abort);
+      void reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+  } catch (error) {
+    throwIfAborted(signal);
+    if (error instanceof ResourceLimitError) throw error;
+    throw new InvalidInputError("Unable to read Blob input.");
+  }
+}
+
+function joinChunks(chunks: Uint8Array[], total: number): Uint8Array {
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 async function readBoundedFile(file: FileHandle, maxInputBytes: number): Promise<Uint8Array> {
@@ -175,13 +293,7 @@ async function readBoundedFile(file: FileHandle, maxInputBytes: number): Promise
     chunks.push(bytesRead === chunk.byteLength ? chunk : chunk.slice(0, bytesRead));
   }
 
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return joinChunks(chunks, total);
 }
 
 export function assertNonEmptyInput(bytes: Uint8Array): void {

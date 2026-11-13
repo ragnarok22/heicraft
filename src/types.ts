@@ -5,6 +5,8 @@ export type OutputFormat = "jpeg" | "png" | "webp";
 export type InputOptions = {
   /** Maximum input size in bytes. Defaults to 20 MiB (20 * 1024 * 1024). */
   maxInputBytes?: number;
+  /** Cancel input reading, queued work, or an active decoder worker. */
+  signal?: AbortSignal;
 };
 
 export type DecodeOptions = InputOptions & {
@@ -21,7 +23,6 @@ export type ConvertOptions = DecodeOptions & {
   format?: OutputFormat;
   quality?: number;
   filename?: string;
-  signal?: AbortSignal;
 };
 
 export type ConvertResult = {

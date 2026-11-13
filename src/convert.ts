@@ -1,4 +1,5 @@
 import {
+  AbortError,
   ConversionError,
   InvalidInputError,
   ResourceLimitError,
@@ -12,6 +13,7 @@ import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 import { resolveMaxPixels } from "./utils/limits";
 import { assertOutputFormat, getOutputMimeType, normalizeQuality } from "./utils/mime";
+import { withDecodeAdmission } from "./workers/runtime";
 
 export async function convertHeic(
   input: HeicInput,
@@ -25,32 +27,34 @@ export async function convertHeic(
   const maxPixels = resolveMaxPixels(options.maxPixels);
 
   const quality = options.quality ?? 0.92;
-  const normalized = await normalizeInput(input, options);
-  assertNonEmptyInput(normalized.bytes);
-  throwIfAborted(options.signal);
-
-  const detection = detectNormalizedHeic(normalized);
-  if (!detection.isHeic) {
-    throw new InvalidInputError();
-  }
-  throwIfAborted(options.signal);
-
-  let decoded: DecodedImage;
-  try {
-    decoded = await decodeHeic(normalized.bytes, maxPixels);
-  } catch (error) {
+  const decoded = await withDecodeAdmission(async () => {
+    const normalized = await normalizeInput(input, options);
+    assertNonEmptyInput(normalized.bytes);
     throwIfAborted(options.signal);
-    if (
-      error instanceof UnsupportedFormatError ||
-      error instanceof ConversionError ||
-      error instanceof ResourceLimitError
-    ) {
-      throw error;
+
+    const detection = detectNormalizedHeic(normalized);
+    if (!detection.isHeic) {
+      throw new InvalidInputError();
     }
-    throw new ConversionError(
-      error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.",
-    );
-  }
+    throwIfAborted(options.signal);
+
+    try {
+      return await decodeHeic(normalized.bytes, maxPixels, options.signal);
+    } catch (error) {
+      throwIfAborted(options.signal);
+      if (
+        error instanceof AbortError ||
+        error instanceof UnsupportedFormatError ||
+        error instanceof ConversionError ||
+        error instanceof ResourceLimitError
+      ) {
+        throw error;
+      }
+      throw new ConversionError(
+        error instanceof Error ? error.message : "Conversion failed while decoding HEIC image.",
+      );
+    }
+  }, options.signal);
   throwIfAborted(options.signal);
 
   const mimeType = getOutputMimeType(format);

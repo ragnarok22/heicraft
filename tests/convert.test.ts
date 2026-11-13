@@ -72,7 +72,7 @@ describe("convertHeic", () => {
     const input = createFtypBytes("heic");
 
     await expect(convertHeic(input, { maxPixels: 100 })).rejects.toBe(error);
-    expect(decodeMock).toHaveBeenCalledExactlyOnceWith(input, 100);
+    expect(decodeMock).toHaveBeenCalledExactlyOnceWith(input, 100, undefined);
   });
 
   it("supports AbortSignal before conversion starts", async () => {
@@ -140,6 +140,25 @@ describe("convertHeic", () => {
     await expect(convertHeic(blob)).rejects.toBeInstanceOf(ConversionError);
 
     expect(blob.reads).toBe(1);
+  });
+
+  it("rejects excess work before reading its input", async () => {
+    let reject!: (error: Error) => void;
+    decodeMock.mockReturnValue(
+      new Promise((_resolve, no) => {
+        reject = no;
+      }),
+    );
+    const pending = Array.from({ length: 10 }, () => convertHeic(createFtypBytes()));
+    const settled = Promise.allSettled(pending);
+    const excess = new CountingBlob([createFtypBytes()]);
+    try {
+      await expect(convertHeic(excess)).rejects.toBeInstanceOf(ResourceLimitError);
+      expect(excess.reads).toBe(0);
+    } finally {
+      reject(new Error("test completed"));
+      await settled;
+    }
   });
 
   it("accepts Buffer-compatible input", async () => {

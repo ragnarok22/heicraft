@@ -1,3 +1,4 @@
+import { AbortError, throwIfAborted } from "./errors";
 import type { HeicDetectionResult, HeicInput, InputOptions, NormalizedInput } from "./types";
 import { type InputReader, withInputReader } from "./utils/input";
 import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from "./utils/mime";
@@ -9,7 +10,9 @@ const av1Brands = new Set(["avif", "avis"]);
 export async function isHeic(input: HeicInput, options: InputOptions = {}): Promise<boolean> {
   try {
     return (await detectHeic(input, options)).isHeic;
-  } catch {
+  } catch (error) {
+    throwIfAborted(options.signal);
+    if (error instanceof AbortError) throw error;
     return false;
   }
 }

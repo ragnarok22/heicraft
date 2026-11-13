@@ -1,6 +1,6 @@
 import type { HeifImage } from "libheif-js/wasm-bundle.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { decodeHeic, readHeicMetadata } from "../src/decoder";
+import { decodeHeic, readHeicMetadata } from "../src/decoder-core";
 
 const backend = vi.hoisted(() => ({
   decode: vi.fn(),

@@ -10,6 +10,8 @@ The `heicraft` wrapper/library source code is licensed under the MIT License. Se
 
 The HEIC decoder backend is [`libheif-js`](https://www.npmjs.com/package/libheif-js), an Emscripten distribution of `libheif` technology for Node.js and browsers. `heicraft` uses its bundled WebAssembly build directly.
 
+The browser decoder worker includes that distribution with attribution in the emitted asset. The Node.js worker loads the installed `libheif-js` dependency. Upstream source, build instructions, and licensing information are available at [catdad-experiments/libheif-js](https://github.com/catdad-experiments/libheif-js).
+
 Important licensing notes:
 
 - `libheif-js` is LGPL-3.0 licensed.

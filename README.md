@@ -85,6 +85,7 @@ Convert one HEIC/HEIF image to JPEG, PNG, or WebP.
 ```ts
 type InputOptions = {
   maxInputBytes?: number;
+  signal?: AbortSignal;
 };
 
 type DecodeOptions = InputOptions & {
@@ -95,7 +96,6 @@ type ConvertOptions = DecodeOptions & {
   format?: "jpeg" | "png" | "webp";
   quality?: number;
   filename?: string;
-  signal?: AbortSignal;
 };
 
 type ConvertResult = {
@@ -119,7 +119,7 @@ Behavior:
 - Returns `Uint8Array` data in Node.js.
 - Validates `quality` as a number between `0` and `1`.
 - Enforces input size before reading a Blob or file and pixel count before allocating RGBA.
-- Supports `AbortSignal` before conversion and after major async steps.
+- Decodes off the calling thread and supports `AbortSignal` during input reading, queueing, and active decoding.
 - Throws typed custom errors for invalid input, unsupported output, aborts, and conversion failures.
 
 ### `isHeic(input, options?)`
@@ -134,7 +134,7 @@ Detection inspects the ISO BMFF `ftyp` box and requires a HEVC-specific brand su
 
 Filename extensions and MIME types are hints only: empty files or JPEGs renamed to `.heic` return `false`. Conversion and metadata inspection use the same signature requirement. Detection does not decode the image or guarantee successful conversion; corrupt payloads and unsupported codec profiles may still fail in the decoder.
 
-Accepts `InputOptions` to configure `maxInputBytes`. Like other input failures, exceeding the byte limit returns `false`; use `detectHeic` if you need the error.
+Accepts `InputOptions` to configure `maxInputBytes` and `signal`. Like other input failures, exceeding the byte limit returns `false`; use `detectHeic` if you need the error. Cancellation always throws `AbortError`, never `false`.
 
 ### `detectHeic(input, options?)`
 
@@ -199,7 +199,26 @@ const withAlpha = await getHeicInfo(file, { inspectAlpha: true });
 
 **`hasAlpha` is omitted by default.** Set `inspectAlpha: true` to check for non-opaque pixels. An alpha channel can be entirely opaque, so channel presence alone is not reported as transparency. If the backend confirms there is no alpha channel, `hasAlpha` is `false` without rendering; otherwise opt-in inspection decodes RGBA and scans the alpha values.
 
-The same byte and pixel limits as conversion apply, even without rendering. Resource-limit errors are propagated, not replaced with partial metadata.
+The same byte and pixel limits as conversion apply, even without rendering. Resource-limit errors and cancellation are propagated, not replaced with partial metadata. Parsing and optional transparency inspection run in decoder workers.
+
+## Workers and Cancellation
+
+Decoding uses one reusable Web Worker in browsers and a lazy pool of up to two `worker_threads` in Node.js, per loaded library instance. Each worker handles one job at a time, with at most eight queued decoder jobs. Admission is also capped at nine browser or ten Node.js calls before reading conversion/metadata inputs. Saturation throws `ResourceLimitError`; detection does not use the decoder pool. These are fixed internal limits, not a configurable pool API or a process-wide resource budget.
+
+```ts
+const controller = new AbortController();
+const conversion = convertHeic(file, { signal: controller.signal });
+controller.abort();
+await conversion; // rejects with heicraft's AbortError
+```
+
+All entry points accept `signal`. Cancelling removes queued jobs or terminates the worker running that job, without cancelling other calls. Replacement workers are created as needed; Node.js waits for termination before reusing the capacity. Idle Node.js workers do not keep the process alive.
+
+With a signal, full Node.js file reads use abortable, byte-capped streams and Blob/File reads cancel their stream reader. Partial file detection checks cancellation around each bounded read. An individual operating-system read already in progress may still finish; no further chunks are requested after cancellation. File handles and abort listeners are cleaned up.
+
+Cancellation does **not** interrupt an already-running `sharp` or `canvas.toBlob()` encoder: conversion checks the signal after encoding instead. Input buffers supplied by the caller are never transferred or detached; the library transfers an internal copy and returns worker-owned RGBA using transferables.
+
+Browser builds require Web Workers, a DOM canvas, and a bundler that emits the worker asset (the production Vite build is smoke-tested). Serve the emitted worker asset and allow it in your Content Security Policy. Worker startup failures are reported rather than silently decoding on the main thread.
 
 ## Resource Limits
 
@@ -268,7 +287,6 @@ Custom errors:
 - Converts one image at a time.
 - No CLI yet.
 - No batch conversion yet.
-- No Web Worker integration yet.
 - No React hooks yet.
 - No advanced resizing, cropping, or EXIF editing yet.
 - No streaming API yet.
@@ -279,7 +297,7 @@ Custom errors:
 
 ## Third-Party Backend
 
-HEIC decoding uses [`libheif-js`](https://www.npmjs.com/package/libheif-js) directly through its bundled WebAssembly build. The adapter passes the original bytes to libheif, including compatible-brand and extended-size `ftyp` headers, and returns raw RGBA pixel data.
+HEIC decoding uses [`libheif-js`](https://www.npmjs.com/package/libheif-js) through its bundled WebAssembly build inside decoder workers. The browser worker bundles that distribution; Node.js loads the installed dependency. The adapter passes unchanged input bytes to libheif, including compatible-brand and extended-size `ftyp` headers, and returns raw RGBA pixel data.
 
 Node.js output encoding uses [`sharp`](https://www.npmjs.com/package/sharp). Browser output encoding uses the platform canvas API.
 

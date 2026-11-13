@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { detectHeic } from "../src";
+import { Readable } from "node:stream";
+import { AbortError, detectHeic } from "../src";
 import { normalizeInput } from "../src/utils/input";
 import { createFtypBytes } from "./helpers";
 
@@ -7,6 +8,7 @@ const file = vi.hoisted(() => ({
   stat: vi.fn(),
   read: vi.fn(),
   close: vi.fn(),
+  createReadStream: vi.fn(),
 }));
 const open = vi.hoisted(() => vi.fn());
 
@@ -82,6 +84,67 @@ describe("bounded file input", () => {
     await expect(normalizeInput("photo.heic")).rejects.toMatchObject({
       code: "INVALID_INPUT",
       message: "Unable to read input file: photo.heic",
+    });
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("aborts an active conversion read and closes the file", async () => {
+    mockFile(createFtypBytes("heic", ["mif1"]));
+    const controller = new AbortController();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const destroyed = vi.fn();
+    file.createReadStream.mockImplementation(
+      ({ signal }) =>
+        new Readable({
+          signal,
+          read() {
+            started();
+          },
+          destroy(error, callback) {
+            destroyed();
+            callback(error);
+          },
+        }),
+    );
+    const result = normalizeInput("photo.heic", { signal: controller.signal });
+    const assertion = expect(result).rejects.toBeInstanceOf(AbortError);
+    await reading;
+    controller.abort();
+    await assertion;
+    expect(destroyed).toHaveBeenCalledOnce();
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("stops partial detection reads after cancellation and closes the file", async () => {
+    mockFile(createFtypBytes("heic", ["mif1"]));
+    const controller = new AbortController();
+    file.read.mockImplementationOnce(async () => {
+      controller.abort();
+      return { bytesRead: 0 };
+    });
+    await expect(detectHeic("photo.heic", { signal: controller.signal })).rejects.toBeInstanceOf(
+      AbortError,
+    );
+    expect(file.read).toHaveBeenCalledOnce();
+    expect(file.close).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the byte cap when using cancellable file reads", async () => {
+    mockFile(new Uint8Array(2));
+    file.createReadStream.mockReturnValue(Readable.from([new Uint8Array(5)]));
+    const signal = new AbortController().signal;
+    await expect(normalizeInput("photo.heic", { maxInputBytes: 4, signal })).rejects.toMatchObject({
+      code: "RESOURCE_LIMIT_EXCEEDED",
+    });
+    expect(file.createReadStream).toHaveBeenCalledWith({
+      start: 0,
+      end: 4,
+      highWaterMark: 5,
+      autoClose: false,
+      signal,
     });
     expect(file.close).toHaveBeenCalledOnce();
   });

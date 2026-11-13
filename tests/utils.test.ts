@@ -2,9 +2,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
-import { describe, expect, it } from "vitest";
-import { InvalidInputError } from "../src";
-import { CountingBlob } from "./helpers";
+import { describe, expect, it, vi } from "vitest";
+import { AbortError, detectHeic, InvalidInputError, isHeic } from "../src";
+import { CountingBlob, createFtypBytes } from "./helpers";
 import { assertNonEmptyInput, normalizeInput } from "../src/utils/input";
 import {
   getHeicExtension,
@@ -15,6 +15,64 @@ import {
 } from "../src/utils/mime";
 
 describe("input utilities", () => {
+  it("does not read an input when its signal is already aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const blob = new CountingBlob([new Uint8Array([1])]);
+
+    await expect(normalizeInput(blob, { signal: controller.signal })).rejects.toBeInstanceOf(
+      AbortError,
+    );
+    expect(blob.reads).toBe(0);
+  });
+
+  it("cancels an in-progress Blob stream and preserves AbortError", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    class PendingBlob extends Blob {
+      override stream(): ReadableStream<Uint8Array<ArrayBuffer>> {
+        return new ReadableStream({ pull: () => started(), cancel });
+      }
+    }
+    const result = normalizeInput(new PendingBlob([new Uint8Array([1])]), {
+      signal: controller.signal,
+    });
+    const assertion = expect(result).rejects.toBeInstanceOf(AbortError);
+    await reading;
+    controller.abort();
+    await assertion;
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it("reads Blob streams with a signal and enforces the cumulative byte limit", async () => {
+    const signal = new AbortController().signal;
+    await expect(
+      normalizeInput(new Blob([new Uint8Array([1, 2, 3])]), { signal }),
+    ).resolves.toMatchObject({ bytes: new Uint8Array([1, 2, 3]) });
+    class GrowingBlob extends Blob {
+      override get size() {
+        return 1;
+      }
+    }
+    await expect(
+      normalizeInput(new GrowingBlob([new Uint8Array(2)]), { signal, maxInputBytes: 1 }),
+    ).rejects.toMatchObject({ code: "RESOURCE_LIMIT_EXCEEDED" });
+  });
+
+  it("propagates cancellation through both detection APIs", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    for (const detect of [detectHeic, isHeic]) {
+      await expect(detect(createFtypBytes(), { signal: controller.signal })).rejects.toBeInstanceOf(
+        AbortError,
+      );
+    }
+  });
+
   it("rejects missing and unknown input", async () => {
     await expect(normalizeInput(null as never)).rejects.toBeInstanceOf(InvalidInputError);
     await expect(normalizeInput({} as never)).rejects.toBeInstanceOf(InvalidInputError);
@@ -126,6 +184,13 @@ describe("input utilities", () => {
         bytes: new Uint8Array([1, 2, 3]),
         filename: "photo.heic",
       });
+      await expect(
+        normalizeInput(filePath, { signal: new AbortController().signal }),
+      ).resolves.toMatchObject({ bytes: new Uint8Array([1, 2, 3]) });
+      await writeFile(filePath, createFtypBytes("heic", ["mif1"]));
+      await expect(
+        detectHeic(filePath, { signal: new AbortController().signal }),
+      ).resolves.toMatchObject({ isHeic: true });
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

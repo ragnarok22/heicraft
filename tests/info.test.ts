@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getHeicInfo, InvalidInputError, ResourceLimitError } from "../src";
+import { AbortError, getHeicInfo, InvalidInputError, ResourceLimitError } from "../src";
 import { readHeicMetadata } from "../src/decoder";
 import { CountingBlob, createFtypBytes } from "./helpers";
 
@@ -37,7 +37,7 @@ describe("getHeicInfo", () => {
     await expect(getHeicInfo(input, { inspectAlpha: true })).resolves.toMatchObject({
       hasAlpha: true,
     });
-    expect(metadataMock).toHaveBeenCalledExactlyOnceWith(input, 25_000_000, true);
+    expect(metadataMock).toHaveBeenCalledExactlyOnceWith(input, 25_000_000, true, undefined);
   });
 
   it("reads Blob input once before inspecting metadata", async () => {
@@ -84,7 +84,7 @@ describe("getHeicInfo", () => {
     const input = createFtypBytes("heic");
 
     await expect(getHeicInfo(input, { maxPixels: 100 })).rejects.toBe(error);
-    expect(metadataMock).toHaveBeenCalledExactlyOnceWith(input, 100, false);
+    expect(metadataMock).toHaveBeenCalledExactlyOnceWith(input, 100, false, undefined);
   });
 
   it("rejects empty HEIC-looking input", async () => {
@@ -100,6 +100,23 @@ describe("getHeicInfo", () => {
       mimeType: "image/heic",
       brand: "heic",
     });
+  });
+
+  it("propagates cancellation instead of returning partial metadata", async () => {
+    const controller = new AbortController();
+    metadataMock.mockImplementation(async () => {
+      controller.abort();
+      throw new Error("worker terminated");
+    });
+    await expect(
+      getHeicInfo(createFtypBytes("heic"), { signal: controller.signal }),
+    ).rejects.toBeInstanceOf(AbortError);
+    expect(metadataMock).toHaveBeenCalledWith(
+      expect.any(Uint8Array),
+      25_000_000,
+      false,
+      controller.signal,
+    );
   });
 
   it("rejects extension-only inputs without invoking the decoder", async () => {

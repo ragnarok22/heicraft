@@ -47,6 +47,7 @@
   },
   "browser": {
     "node:fs/promises": "./dist/browser/fs-promises.js",
+    "node:worker_threads": "./dist/browser/worker-threads.js",
     "sharp": "./dist/browser/sharp.js"
   },
   "main": "./dist/index.js",

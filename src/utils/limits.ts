@@ -1,4 +1,4 @@
-import { ConversionError, InvalidInputError, ResourceLimitError } from "../errors";
+import { ConversionError, InvalidInputError, ResourceLimitError } from "../errors.ts";
 
 const DEFAULT_MAX_INPUT_BYTES = 20 * 1024 * 1024;
 const DEFAULT_MAX_PIXELS = 25_000_000;
