@@ -80,23 +80,27 @@ PNG, and WebP and decode the pixels, rather than only inspecting image headers.
 
 The browser smoke test packs and extracts the actual npm artifact, reuses the
 installed runtime dependencies offline, and builds a production Vite bundle from
-that artifact. It runs real conversions in headless Chromium and cross-decodes Node
-outputs with Chromium and browser outputs with Sharp, checking file signatures,
+that artifact. It runs real conversions in headless Chromium or WebKit and cross-decodes Node
+outputs with that browser and browser outputs with Sharp, checking file signatures,
 dimensions, and the fixture's quadrant colors. No conversion backends are mocked,
 and a missing fixture or browser fails the check rather than skipping it. It also
 checks OffscreenCanvas encoding, the DOM fallback, worker cancellation, rotation,
-and transparency. Use `pnpm test` for quick feedback without coverage; do not run
+transparency, cross-realm inputs, and the worker-free detection entrypoint. Native
+smoke jobs exercise workers and encoders on macOS and Windows without repeating
+the full test suite. Use `pnpm test` for quick feedback without coverage; do not run
 both test commands unless there is a specific reason to repeat the suite.
 
-Install Chromium once, then build and run the smoke test:
+Install the browsers once, then build and run the smoke tests:
 
 ```sh
-pnpm exec playwright install chromium
+pnpm exec playwright install chromium webkit
 pnpm run build
 pnpm run smoke:browser
+pnpm run smoke:browser webkit
+pnpm run smoke:node
 ```
 
-On Linux/CI, use `pnpm exec playwright install --with-deps chromium` to also
+On Linux/CI, use `pnpm exec playwright install --with-deps chromium webkit` to also
 install the browser's system dependencies.
 
 ## Licensing

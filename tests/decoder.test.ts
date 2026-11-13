@@ -107,14 +107,16 @@ describe("libheif decoder adapter", () => {
     expect(image.free).toHaveBeenCalledOnce();
   });
 
-  it("releases handles if optional alpha rendering fails", async () => {
+  it("preserves dimensions and releases handles if optional alpha rendering fails", async () => {
     const image = mockImage();
     image.display.mockImplementation((_frame, callback) => callback(null));
     backend.decode.mockReturnValue([image]);
 
-    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).rejects.toThrow(
-      "HEIF processing error",
-    );
+    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).resolves.toEqual({
+      width: 2,
+      height: 1,
+      imagesCount: 1,
+    });
     expect(image.free).toHaveBeenCalledOnce();
     expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
   });

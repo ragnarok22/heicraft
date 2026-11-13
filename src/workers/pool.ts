@@ -5,6 +5,7 @@ import {
   WorkerError,
   throwIfAborted,
 } from "../errors";
+import { prepareInputTransfer } from "../utils/ownership";
 import {
   type DecodeRequest,
   deserializeError,
@@ -117,8 +118,7 @@ export class DecoderPool {
       if (slot.retiring) return;
       throwIfAborted(job.signal);
       slot.worker.ref?.();
-      // Never transfer caller-owned buffers (including pooled Node Buffers or subarrays).
-      const bytes = new Uint8Array(job.request.bytes);
+      const bytes = prepareInputTransfer(job.request.bytes);
       slot.worker.postMessage({ ...job.request, bytes, id: job.id }, [bytes.buffer]);
     } catch (error) {
       this.retire(
@@ -140,10 +140,18 @@ export class DecoderPool {
     if (!job || slot.retiring || response.id !== job.id) return;
     slot.job = undefined;
     job.cleanup();
+    const error = response.ok ? undefined : deserializeError(response.error);
+    if (error instanceof WorkerError) {
+      job.reject(job.signal?.aborted ? new AbortError() : error);
+      // A failed backend initialization can remain cached inside this worker.
+      // Keep its reference until termination finishes, then recover queued work.
+      this.retire(slot);
+      return;
+    }
     slot.worker?.unref?.();
     if (job.signal?.aborted) job.reject(new AbortError());
     else if (response.ok) job.resolve(response.result);
-    else job.reject(deserializeError(response.error));
+    else job.reject(error);
     this.dispatch();
     if (!slot.job && !slot.retiring) {
       slot.idleTimer = setTimeout(() => this.retire(slot), this.idleTimeoutMs);

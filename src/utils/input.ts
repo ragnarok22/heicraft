@@ -3,6 +3,9 @@ import { AbortError, InvalidInputError, ResourceLimitError, throwIfAborted } fro
 import type { HeicInput, InputOptions, NormalizedInput } from "../types";
 import { isBlobLike, isFileLike, isNodeEnvironment } from "./environment";
 import { assertInputSize, resolveMaxInputBytes } from "./limits";
+import { ownInput } from "./ownership";
+
+const nativeBlobArrayBuffer = typeof Blob === "undefined" ? undefined : Blob.prototype.arrayBuffer;
 
 export type InputReader = {
   size: number;
@@ -237,7 +240,12 @@ async function readBlob(
 ): Promise<Uint8Array> {
   throwIfAborted(signal);
   try {
-    if (!signal) return new Uint8Array(await input.arrayBuffer());
+    if (!signal) {
+      const read = input.arrayBuffer;
+      const bytes = new Uint8Array(await read.call(input));
+      // Overrides may return caller-owned buffers. Only native reads promise a fresh allocation.
+      return read === nativeBlobArrayBuffer ? ownInput(bytes) : bytes;
+    }
     const reader = input.stream().getReader();
     const abort = () => {
       void reader.cancel(new AbortError()).catch(() => {});
@@ -276,7 +284,7 @@ function joinChunks(chunks: Uint8Array[], total: number): Uint8Array {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return bytes;
+  return ownInput(bytes);
 }
 
 async function readBoundedFile(file: FileHandle, maxInputBytes: number): Promise<Uint8Array> {

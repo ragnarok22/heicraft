@@ -5,6 +5,7 @@ export default defineConfig([
   {
     entry: {
       index: "src/index.ts",
+      detect: "src/detection.ts",
       "browser/fs-promises": "src/browser/fs-promises.ts",
       "browser/sharp": "src/browser/sharp.ts",
       "browser/worker-threads": "src/browser/worker-threads.ts",

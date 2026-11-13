@@ -7,9 +7,27 @@ export function isNodeEnvironment(): boolean {
 }
 
 export function isBlobLike(input: unknown): input is Blob {
-  return typeof Blob !== "undefined" && input instanceof Blob;
+  try {
+    // Native brand checks accept other realms, but reject forged toStringTags/prototypes.
+    return typeof blobSize?.call(input) === "number";
+  } catch {
+    return false;
+  }
 }
 
 export function isFileLike(input: unknown): input is File {
-  return typeof File !== "undefined" && input instanceof File;
+  try {
+    return typeof fileName?.call(input) === "string";
+  } catch {
+    return false;
+  }
 }
+
+const blobSize =
+  typeof Blob === "undefined"
+    ? undefined
+    : Object.getOwnPropertyDescriptor(Blob.prototype, "size")?.get;
+const fileName =
+  typeof File === "undefined"
+    ? undefined
+    : Object.getOwnPropertyDescriptor(File.prototype, "name")?.get;

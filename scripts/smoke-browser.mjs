@@ -5,11 +5,14 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
-import { chromium } from "playwright";
+import { chromium, webkit } from "playwright";
 import sharp from "sharp";
 import { build, preview } from "vite";
 
 const projectRoot = dirname(fileURLToPath(new URL("../package.json", import.meta.url)));
+const browserName = process.argv[2] ?? "chromium";
+const engine = { chromium, webkit }[browserName];
+if (!engine) throw new Error(`Unknown smoke browser: ${browserName}. Use chromium or webkit.`);
 const fixture = await readFile(new URL("../tests/fixtures/pattern.heic", import.meta.url));
 const directory = await mkdtemp(join(tmpdir(), "heicraft-browser-"));
 let server;
@@ -22,7 +25,7 @@ try {
   ({ convertHeic } = await import(pathToFileURL(join(packageRoot, "dist/index.js")).href));
   await writeFile(
     join(directory, "index.js"),
-    'import { convertHeic } from "heicraft"; window.__heicraftConvertHeic = convertHeic;\n',
+    'import { convertHeic, detectHeic, getHeicInfo } from "heicraft"; Object.assign(window, { __heicraftConvertHeic: convertHeic, __heicraftDetectHeic: detectHeic, __heicraftGetHeicInfo: getHeicInfo });\n',
   );
 
   await writeFile(
@@ -32,6 +35,7 @@ try {
   await mkdir(join(directory, "node_modules"));
   await symlink(packageRoot, join(directory, "node_modules", "heicraft"), "dir");
 
+  await checkDetectionBundle();
   const outputDirectory = join(directory, "dist");
   await build({
     root: directory,
@@ -67,7 +71,7 @@ try {
     build: { outDir: outputDirectory },
     preview: { host: "127.0.0.1", port: 0, strictPort: true },
   });
-  browser = await chromium.launch();
+  browser = await engine.launch();
   const page = await browser.newPage();
   await page.addInitScript(() => {
     const NativeWorker = window.Worker;
@@ -104,6 +108,7 @@ try {
       await checkWorkerCancellation(page);
       await checkBrowserEncodingPaths(page);
       await checkOrientedAlpha(page);
+      await checkCrossRealmInputs(page);
     })(),
     new Promise((_, reject) => {
       conversionTimeout = setTimeout(
@@ -138,6 +143,8 @@ async function unpackPackage() {
   for (const required of [
     "dist/index.js",
     "dist/index.d.ts",
+    "dist/detect.js",
+    "dist/detect.d.ts",
     "dist/node-worker.js",
     "dist/browser-worker.js",
     "dist/libheif-js.LICENSE",
@@ -159,6 +166,71 @@ async function unpackPackage() {
   }
   console.log(`Testing npm artifact ${packed.filename}.`);
   return packageRoot;
+}
+
+async function checkDetectionBundle() {
+  await writeFile(
+    join(directory, "detect.js"),
+    'import { isHeic } from "heicraft/detect"; window.__heicraftIsHeic = isHeic;\n',
+  );
+  await writeFile(
+    join(directory, "detect.html"),
+    '<script type="module" src="/detect.js"></script>\n',
+  );
+  const result = await build({
+    root: directory,
+    configFile: false,
+    logLevel: "silent",
+    build: { write: false, rollupOptions: { input: join(directory, "detect.html") } },
+  });
+  let bytes = 0;
+  for (const file of result.output) {
+    if (!file.fileName.endsWith(".js")) continue;
+    const code = file.type === "chunk" ? file.code : String(file.source);
+    assert.ok(!file.fileName.includes("worker"), "Detection must not emit a worker asset.");
+    assert.ok(!code.includes("libheif"), "Detection must not bundle the decoder.");
+    assert.ok(!code.includes("browser-worker"), "Detection must not reference a worker.");
+    bytes += Buffer.byteLength(code);
+  }
+  assert.ok(bytes > 0, "Could not find the detection bundle.");
+  console.log(`Detection-only bundle: ${bytes} bytes, no decoder or worker assets.`);
+}
+
+async function checkCrossRealmInputs(page) {
+  await page.evaluate(async (bytes) => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    try {
+      const realm = frame.contentWindow;
+      const file = new realm.File([new Uint8Array(bytes)], "iframe.heic", { type: "image/heic" });
+      const blob = new realm.Blob([new Uint8Array(bytes)], { type: "image/heic" });
+      if (file instanceof File || blob instanceof Blob) {
+        throw new Error("The test must use real objects from a different realm.");
+      }
+      for (const input of [file, blob]) {
+        const detection = await window.__heicraftDetectHeic(input);
+        if (!detection.isHeic || detection.extension !== "heic") {
+          throw new Error("Failed to detect a cross-realm File/Blob.");
+        }
+        const info = await window.__heicraftGetHeicInfo(input);
+        if (info.width !== 32 || info.height !== 32) {
+          throw new Error("Failed to inspect cross-realm metadata.");
+        }
+        const output = await window.__heicraftConvertHeic(input, {
+          format: "png",
+          signal: new AbortController().signal,
+        });
+        if (!(output.data instanceof Blob) || output.data.type !== "image/png") {
+          throw new Error("Failed to convert a cross-realm File/Blob.");
+        }
+      }
+    } finally {
+      frame.remove();
+    }
+  }, Array.from(fixture));
+  console.log(
+    `Cross-realm File/Blob detection, metadata, and conversion passed in ${browserName}.`,
+  );
 }
 
 async function checkBrowserEncodingPaths(page) {
@@ -209,7 +281,7 @@ async function checkOrientedAlpha(page) {
   ]) {
     assert.ok(Math.abs(data[(y * info.width + x) * 4 + 3] - alpha) <= 1);
   }
-  console.log("Non-square HEIC rotation and transparency passed in Chromium.");
+  console.log(`Non-square HEIC rotation and transparency passed in ${browserName}.`);
 }
 
 async function checkWorkerCancellation(page) {
@@ -267,13 +339,19 @@ async function checkConversions(page) {
         bitmap.close();
       }
     }, Array.from(nodeResult.data));
-    assertPattern(nodePixels, `Node ${format}, decoded by Chromium`);
+    assertPattern(nodePixels, `Node ${format}, decoded by ${browserName}`);
 
+    const supported = await supportsBrowserOutput(page, format);
     // Exercise the bundled WASM decoder and real canvas encoder using Blob input.
     const browserResult = await page.evaluate(
       async ({ bytes, format }) => {
         const input = new Blob([new Uint8Array(bytes)], { type: "image/heic" });
-        const result = await window.__heicraftConvertHeic(input, { format, quality: 0.9 });
+        let result;
+        try {
+          result = await window.__heicraftConvertHeic(input, { format, quality: 0.9 });
+        } catch (error) {
+          return { error: { code: error.code, message: error.message } };
+        }
         if (!(result.data instanceof Blob)) {
           throw new Error("Expected browser conversion to return a Blob.");
         }
@@ -286,6 +364,13 @@ async function checkConversions(page) {
       },
       { bytes: Array.from(fixture), format },
     );
+    if (!supported) {
+      assert.equal(format, "webp", "JPEG and PNG output must be available.");
+      assert.equal(browserResult.error?.code, "UNSUPPORTED_FORMAT");
+      console.log(`${browserName} correctly rejects unsupported ${format} encoding.`);
+      continue;
+    }
+    assert.equal(browserResult.error, undefined, browserResult.error?.message);
     assert.equal(browserResult.format, format);
     assert.equal(browserResult.mimeType, `image/${format}`);
     assert.equal(browserResult.blobType, `image/${format}`);
@@ -301,8 +386,29 @@ async function checkConversions(page) {
       { width: info.width, height: info.height, data },
       `Browser ${format}, decoded by Sharp`,
     );
-    console.log(`Real ${format} conversion passed in Node.js and Chromium.`);
+    console.log(`Real ${format} conversion passed in Node.js and ${browserName}.`);
   }
+}
+
+async function supportsBrowserOutput(page, format) {
+  return page.evaluate(async (format) => {
+    const mime = `image/${format}`;
+    if (
+      typeof OffscreenCanvas !== "undefined" &&
+      typeof OffscreenCanvas.prototype.convertToBlob === "function"
+    ) {
+      const canvas = new OffscreenCanvas(1, 1);
+      canvas.getContext("2d").fillRect(0, 0, 1, 1);
+      const blob = await canvas.convertToBlob({ type: mime });
+      return blob.type === mime;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    canvas.getContext("2d").fillRect(0, 0, 1, 1);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime));
+    return blob?.type === mime;
+  }, format);
 }
 
 function assertSignature(bytes, format) {

@@ -1,6 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AbortError, ConversionError, ResourceLimitError } from "../src";
 import { WorkerError } from "../src/errors";
+import { normalizeInput } from "../src/utils/input";
+import { ownInput } from "../src/utils/ownership";
 import { DecoderPool, type DecoderWorker } from "../src/workers/pool";
 import type { WorkerRequest, WorkerResponse } from "../src/workers/protocol";
 
@@ -50,6 +55,79 @@ class TestWorker implements DecoderWorker {
 const request = { operation: "metadata", bytes: new Uint8Array([1, 2, 3]) } as const;
 
 describe("bounded decoder workers", () => {
+  it.each([false, true])(
+    "transfers internally allocated Blob input without copying (signal: %s)",
+    async (cancellable) => {
+      const signal = cancellable ? new AbortController().signal : undefined;
+      const input = await normalizeInput(new Blob([new Uint8Array([1, 2, 3])]), { signal });
+      const worker = new TestWorker();
+      const pool = new DecoderPool(async () => worker, 1, 1);
+      const job = pool.run({ ...request, bytes: input.bytes });
+      await worker.posted.promise;
+      expect(input.bytes.byteLength).toBe(0);
+      expect([...worker.requests[0].bytes]).toEqual([1, 2, 3]);
+      worker.complete();
+      await job;
+    },
+  );
+
+  it("does not detach buffers returned by user-supplied Blob overrides", async () => {
+    const backing = new Uint8Array([1, 2, 3]);
+    class BorrowedBlob extends Blob {
+      override async arrayBuffer() {
+        return backing.buffer;
+      }
+    }
+    const input = await normalizeInput(new BorrowedBlob([backing]));
+    const worker = new TestWorker();
+    const pool = new DecoderPool(async () => worker, 1, 1);
+    const job = pool.run({ ...request, bytes: input.bytes });
+    await worker.posted.promise;
+    expect([...backing]).toEqual([1, 2, 3]);
+    worker.complete();
+    await job;
+  });
+
+  it.each([
+    [1, 4],
+    [0, 3],
+  ])("never transfers bytes outside an owned input view (%i, %i)", async (start, end) => {
+    const backing = new Uint8Array([9, 1, 2, 3, 8]);
+    const input = ownInput(backing.subarray(start, end));
+    const worker = new TestWorker();
+    const pool = new DecoderPool(async () => worker, 1, 1);
+    const job = pool.run({ ...request, bytes: input });
+    await worker.posted.promise;
+    expect([...backing]).toEqual([9, 1, 2, 3, 8]);
+    expect([...worker.requests[0].bytes]).toEqual([...backing.subarray(start, end)]);
+    worker.complete();
+    await job;
+  });
+
+  it.each([false, true])(
+    "transfers file-read buffers without a worker-side copy (signal: %s)",
+    async (cancellable) => {
+      const directory = await mkdtemp(join(tmpdir(), "heicraft-owned-"));
+      try {
+        const path = join(directory, "input.heic");
+        await writeFile(path, new Uint8Array([1, 2, 3]));
+        const input = await normalizeInput(path, {
+          signal: cancellable ? new AbortController().signal : undefined,
+        });
+        const worker = new TestWorker();
+        const pool = new DecoderPool(async () => worker, 1, 1);
+        const job = pool.run({ ...request, bytes: input.bytes });
+        await worker.posted.promise;
+        expect(input.bytes.byteLength).toBe(0);
+        expect([...worker.requests[0].bytes]).toEqual([1, 2, 3]);
+        worker.complete();
+        await job;
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("bounds workers and queued work, reuses idle workers, and preserves input views", async () => {
     const workers: TestWorker[] = [];
     const create = vi.fn(async () => {
@@ -247,6 +325,34 @@ describe("bounded decoder workers", () => {
     worker.complete();
     await next;
     expect(worker.terminate).not.toHaveBeenCalled();
+  });
+
+  it("replaces a worker whose backend failed initialization before dispatching queued work", async () => {
+    const broken = new TestWorker();
+    const replacement = new TestWorker();
+    const pool = new DecoderPool(
+      vi.fn().mockResolvedValueOnce(broken).mockResolvedValueOnce(replacement),
+      1,
+      1,
+    );
+    const first = pool.run(request);
+    const assertion = expect(first).rejects.toBeInstanceOf(WorkerError);
+    await broken.posted.promise;
+    const next = pool.run(request);
+    broken.onMessage?.({
+      id: broken.requests[0].id,
+      ok: false,
+      error: {
+        code: "CONVERSION_ERROR",
+        workerFailure: true,
+        message: "Unable to initialize the decoder.",
+      },
+    });
+    await assertion;
+    await replacement.posted.promise;
+    expect(broken.terminate).toHaveBeenCalledOnce();
+    replacement.complete();
+    await next;
   });
 
   it("does not create a worker for an already-aborted signal", () => {

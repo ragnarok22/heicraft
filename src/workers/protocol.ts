@@ -5,6 +5,7 @@ import {
   InvalidInputError,
   ResourceLimitError,
   UnsupportedFormatError,
+  WorkerError,
 } from "../errors.ts";
 import type { DecodedImage, HeicInfo, OutputFormat } from "../types";
 
@@ -27,6 +28,7 @@ type SerializedCause = {
 };
 type SerializedError = {
   code: string;
+  workerFailure?: boolean;
   message: string;
   stack?: string;
   cause?: SerializedCause;
@@ -41,12 +43,18 @@ export function serializeError(error: unknown): SerializedError {
     code: error instanceof HeicraftError ? error.code : "CONVERSION_ERROR",
     message: error instanceof Error ? error.message : "HEIC decoding failed.",
     ...(error instanceof HeicraftError ? { stack: error.stack } : {}),
+    ...(error instanceof WorkerError ? { workerFailure: true } : {}),
     ...(cause === undefined ? {} : { cause: serializeCause(cause) }),
   };
 }
 
 export function deserializeError(error: SerializedError): HeicraftError {
   const options = error.cause === undefined ? undefined : { cause: deserializeCause(error.cause) };
+  if (error.workerFailure) {
+    const result = new WorkerError(error.message, options);
+    if (error.stack !== undefined) result.stack = error.stack;
+    return result;
+  }
   let result: HeicraftError;
   switch (error.code) {
     case "ABORT_ERROR":

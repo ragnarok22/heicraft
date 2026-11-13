@@ -57,5 +57,41 @@ jobs:
       - name: Smoke test real Node and browser conversions
         run: pnpm run smoke:browser
 
+      - name: Install WebKit
+        if: matrix.node-version == 24
+        run: pnpm exec playwright install --with-deps webkit
+
+      - name: Smoke test WebKit
+        if: matrix.node-version == 24
+        run: pnpm run smoke:browser webkit
+
       - name: Check package contents
         run: pnpm run pack:check
+
+  native:
+    name: Native smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Smoke test native encoders and workers
+        run: pnpm run smoke:node

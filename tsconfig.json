@@ -14,7 +14,8 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "paths": {
-      "heicraft": ["./src/index.ts"]
+      "heicraft": ["./src/index.ts"],
+      "heicraft/detect": ["./src/detection.ts"]
     },
     "types": ["node", "vitest/globals"]
   },

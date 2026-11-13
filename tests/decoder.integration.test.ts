@@ -68,6 +68,22 @@ describe("real HEIC conversion", () => {
 });
 
 describe("real HEIC decoding", () => {
+  it("keeps valid dimensions when optional transparency inspection cannot decode pixels", async () => {
+    const input = await readFile(new URL("./fixtures/oriented-alpha.heic", import.meta.url));
+    for (let offset = 0; offset + 8 <= input.length; ) {
+      const size = input.readUInt32BE(offset);
+      if (input.toString("ascii", offset + 4, offset + 8) === "mdat") {
+        input.fill(0, offset + 8, offset + size);
+        break;
+      }
+      if (size < 8) throw new Error("Unexpected fixture box size.");
+      offset += size;
+    }
+    const metadata = await getHeicInfo(input);
+    expect(metadata).toMatchObject({ width: 24, height: 40, imagesCount: 1 });
+    await expect(getHeicInfo(input, { inspectAlpha: true })).resolves.toEqual(metadata);
+  });
+
   it("returns basic metadata without inspecting transparency by default", async () => {
     const info = await getHeicInfo(fixture);
 

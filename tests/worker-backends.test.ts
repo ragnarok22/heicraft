@@ -5,6 +5,7 @@ import {
   InvalidInputError,
   ResourceLimitError,
   UnsupportedFormatError,
+  WorkerError,
 } from "../src/errors";
 import { executeRequest, responseTransfers } from "../src/workers/execute";
 import { createDecoderWorker } from "../src/workers/factory";
@@ -99,6 +100,17 @@ describe("worker wire protocol", () => {
     expect(error.stack).toBe(original.stack);
     expect(error.cause).toBeInstanceOf(Error);
     expect(error.cause).toMatchObject({ message: "pixel limit" });
+  });
+
+  it("does not reclassify initialization failures as image conversion failures", () => {
+    const cause = new Error("WebAssembly initialization failed.");
+    const original = new WorkerError("Unable to initialize decoder.", { cause });
+    const error = deserializeError(structuredClone(serializeError(original)));
+    expect(error).toBeInstanceOf(WorkerError);
+    expect(error).toBeInstanceOf(ConversionError);
+    expect(error.code).toBe("CONVERSION_ERROR");
+    expect(error.stack).toBe(original.stack);
+    expect(error.cause).toMatchObject({ message: cause.message });
   });
 
   it("serializes non-Error failures without copying uncloneable values", () => {

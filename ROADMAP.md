@@ -13,13 +13,15 @@ For usage and API behavior, see the [README](./README.md). For released changes,
 - Single-image conversion to JPEG, PNG, and WebP.
 - Browser and Node.js inputs, including Node.js filesystem paths.
 - ESM output and exported TypeScript declarations.
-- Signature-based detection that distinguishes HEVC, AV1, and generic HEIF brands.
+- Signature-based detection that distinguishes HEVC, AV1, and generic HEIF brands,
+  with a lightweight detection-only entrypoint.
 - Basic dimensions and image-count inspection without rendering, plus opt-in transparency inspection.
 - Browser Web Worker decoding and OffscreenCanvas encoding, with a DOM fallback.
 - A bounded Node.js worker pool and automatic idle-worker cleanup.
 - Cancellation during input reading, queueing, and active decoding.
 - Default input-byte and pixel-count limits, complete-operation admission limits, and typed errors.
-- Real-image integration tests and a production Vite/Chromium smoke test of the npm tarball.
+- Real-image integration tests, Vite/Chromium/WebKit smoke tests of the npm tarball,
+  and focused native smoke jobs for macOS and Windows.
 - CI checks for formatting, linting, types, tests, and package builds.
 
 ### Maintenance Priorities

@@ -41,7 +41,7 @@ The package is **ESM-only** and includes TypeScript declarations.
 | Node.js     | Maintained LTS lines **22** (22.13.0 or later), **24**, and **26**. Use the latest patch release of a supported line. Output encoding uses `sharp`; its native dependencies must support your deployment platform. |
 | Browser     | WebAssembly and module Web Workers. Encoding uses OffscreenCanvas where available, otherwise a DOM canvas. Use a bundler that honors browser mappings and emits the worker asset.                                  |
 
-The production Vite build is smoke-tested in Chromium. This is not a guarantee of compatibility with every browser or bundler. See [browser deployment requirements](#browser-deployment).
+The production Vite build is smoke-tested in Chromium and WebKit. This is not a guarantee of compatibility with every browser or bundler. Output encoding capabilities differ: a browser without WebP encoding must return `UnsupportedFormatError`, not mislabeled PNG. See [browser deployment requirements](#browser-deployment).
 
 ### Upgrading to 0.3.0
 
@@ -218,6 +218,21 @@ Invalid or unreadable inputs and byte-limit failures return `false`. Cancellatio
 
 Detection is not a full validity check: a matching signature does not guarantee that the payload can be decoded.
 
+#### Detection-only entrypoint (unreleased)
+
+Development builds also provide a dedicated entrypoint for applications that only
+need detection:
+
+```ts
+import { detectHeic, isHeic } from "heicraft/detect";
+```
+
+It exposes detection functions, their input/result types, and the relevant typed
+errors without referencing the decoder, encoders, or worker factories. A
+detection-only production Vite build does not emit the decoder worker asset.
+The existing imports from `heicraft` remain supported. See the
+[unreleased changelog](./CHANGELOG.md#unreleased) for availability in registry releases.
+
 ### `detectHeic(input, options?)`
 
 Accepts `InputOptions` and inspects the leading ISO BMFF `ftyp` box without decoding pixels. Unlike `isHeic`, input failures are propagated, including `ResourceLimitError` for oversized inputs. `maxPixels` does not apply.
@@ -269,7 +284,7 @@ Dimensions and image count are read from image handles without rendering pixels 
 
 **`hasAlpha` is omitted by default.** With `inspectAlpha: true`, an image without an alpha channel returns `false` without rendering. Otherwise, the image is decoded and its alpha values scanned: an entirely opaque alpha channel also returns `false`.
 
-All result fields are optional. Backend parsing or rendering failures may leave only signature-derived information. Cancellation, resource-limit errors, unsupported-runtime errors, and worker startup/transport failures are propagated, not replaced with partial metadata. The byte and pixel limits apply even without rendering.
+All result fields are optional. Backend parsing failures may leave only signature-derived information. If only optional alpha rendering fails, valid dimensions and image counts are retained and `hasAlpha` is omitted. Cancellation, resource-limit errors, unsupported-runtime errors, backend initialization failures, and worker startup/transport failures are propagated, not replaced with partial metadata. The byte and pixel limits apply even without rendering.
 
 ## Workers and Cancellation
 
@@ -307,7 +322,7 @@ With a signal, full Node.js file reads use abortable, byte-capped streams and Bl
 
 Cancellation **does not interrupt an already-running Sharp or fallback DOM `canvas.toBlob()` encoder**. Conversion checks the signal after encoding instead, retaining its admission slot until that encoder finishes.
 
-Caller-owned buffers are never transferred or detached. The library transfers an internal input copy. When encoding runs on the calling thread, worker-owned RGBA is returned using transferables; the OffscreenCanvas path returns an encoded `Blob` instead.
+Caller-owned buffers are never transferred or detached. The library transfers its own input buffers directly when ownership is known, avoiding a redundant compressed-input copy. Buffers borrowed from callers or custom Blob reading overrides are copied before transfer. Blob/File inputs from other realms, such as iframes, are supported. When encoding runs on the calling thread, worker-owned RGBA is returned using transferables; the OffscreenCanvas path returns an encoded `Blob` instead.
 
 ## Resource Limits
 

@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- Lightweight `heicraft/detect` entrypoint for detection-only consumers, without
+  emitting decoder workers in production Vite builds.
+- Cross-realm Blob/File support, including files created in iframes.
+- WebKit smoke coverage and focused native-worker/encoder checks for macOS and Windows.
+
+### Changed
+
+- Transfer library-owned input buffers directly to workers instead of making
+  another compressed-input copy. Caller-owned buffers remain protected.
+
+### Fixed
+
+- Preserve decoder dependency/loading failures across worker serialization and
+  propagate them from metadata inspection.
+- Retain valid dimensions and image counts when optional alpha rendering fails.
+
 ## 0.3.0
 
 Release date: 2026-11-13.

@@ -1,4 +1,5 @@
 import type { HeifImage } from "libheif-js/wasm-bundle.js";
+import { ConversionError, WorkerError } from "./errors.ts";
 import type { DecodedImage, HeicInfo } from "./types";
 import { assertPixelCount, resolveMaxPixels } from "./utils/limits.ts";
 
@@ -25,9 +26,18 @@ export async function readHeicMetadata(
 
     if (inspectAlpha) {
       // A channel can be entirely opaque; its presence alone does not prove transparency.
-      info.hasAlpha = image.has_alpha_channel()
-        ? hasNonOpaquePixels((await renderImage(image, dimensions.width, dimensions.height)).data)
-        : false;
+      if (!image.has_alpha_channel()) {
+        info.hasAlpha = false;
+      } else {
+        try {
+          const rendered = await renderImage(image, dimensions.width, dimensions.height);
+          info.hasAlpha = hasNonOpaquePixels(rendered.data);
+        } catch (error) {
+          // Optional pixel inspection must not discard dimensions already read.
+          // Only recover from rendering errors, not allocation or infrastructure failures.
+          if (!(error instanceof ConversionError)) throw error;
+        }
+      }
     }
     return info;
   });
@@ -37,10 +47,15 @@ async function withHeicImages<T>(
   bytes: Uint8Array,
   inspect: (image: HeifImage, images: HeifImage[]) => T | Promise<T>,
 ): Promise<T> {
-  const { default: libheif } = await import("libheif-js/wasm-bundle.js");
-  await libheif.ready;
-
-  const decoder = new libheif.HeifDecoder();
+  let libheif: typeof import("libheif-js/wasm-bundle.js").default;
+  let decoder: InstanceType<typeof libheif.HeifDecoder>;
+  try {
+    ({ default: libheif } = await import("libheif-js/wasm-bundle.js"));
+    await libheif.ready;
+    decoder = new libheif.HeifDecoder();
+  } catch (error) {
+    throw new WorkerError("Unable to initialize the HEIC decoder.", { cause: error });
+  }
   let images: HeifImage[] = [];
 
   try {
@@ -75,13 +90,17 @@ function readDimensions(image: HeifImage, maxPixels: number): { width: number; h
 function renderImage(image: HeifImage, width: number, height: number): Promise<DecodedImage> {
   const data = new Uint8ClampedArray(width * height * 4);
   return new Promise((resolve, reject) => {
-    image.display({ width, height, data }, (rendered) => {
-      if (!rendered) {
-        reject(new Error("HEIF processing error"));
-        return;
-      }
-      resolve(rendered);
-    });
+    try {
+      image.display({ width, height, data }, (rendered) => {
+        if (!rendered) {
+          reject(new ConversionError("HEIF processing error"));
+          return;
+        }
+        resolve(rendered);
+      });
+    } catch (error) {
+      reject(new ConversionError("HEIF processing error", { cause: error }));
+    }
   });
 }
 
