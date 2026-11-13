@@ -4,7 +4,7 @@
   "description": "Modern HEIC/HEIF conversion toolkit for JavaScript and TypeScript.",
   "type": "module",
   "license": "MIT",
-  "author": "",
+  "author": "Reinier Hernández",
   "homepage": "https://github.com/ragnarok22/heicraft#readme",
   "repository": {
     "type": "git",
