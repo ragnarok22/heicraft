@@ -181,12 +181,7 @@ For the MVP, metadata is intentionally basic. Width, height, and alpha informati
 ## Error Handling
 
 ```ts
-import {
-  convertHeic,
-  HeicraftError,
-  InvalidInputError,
-  UnsupportedFormatError,
-} from "heicraft";
+import { convertHeic, HeicraftError, InvalidInputError, UnsupportedFormatError } from "heicraft";
 
 try {
   const result = await convertHeic(file, { format: "webp" });
