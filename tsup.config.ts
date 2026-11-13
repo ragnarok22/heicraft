@@ -1,3 +1,4 @@
+import { copyFile } from "node:fs/promises";
 import { defineConfig } from "tsup";
 
 export default defineConfig([
@@ -32,7 +33,10 @@ export default defineConfig([
     splitting: false,
     noExternal: ["libheif-js"],
     banner: {
-      js: "/*! Includes libheif-js (LGPL-3.0): https://github.com/catdad-experiments/libheif-js — see THIRD_PARTY_NOTICES.md. */",
+      js: "/*! Includes libheif-js (LGPL-3.0): https://github.com/catdad-experiments/libheif-js — see libheif-js.LICENSE and THIRD_PARTY_NOTICES.md. */",
+    },
+    onSuccess: async () => {
+      await copyFile("node_modules/libheif-js/LICENSE", "dist/libheif-js.LICENSE");
     },
   },
 ]);

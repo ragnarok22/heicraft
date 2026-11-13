@@ -31,6 +31,7 @@ export async function withInputReader<T>(
           read: (start, end) => readFileRange(file, start, Math.min(end, size), options.signal),
         });
         // Partial inspection must not silently accept growth beyond the input limit.
+        throwIfAborted(options.signal);
         assertInputSize((await file.stat()).size, maxInputBytes);
         throwIfAborted(options.signal);
         return result;

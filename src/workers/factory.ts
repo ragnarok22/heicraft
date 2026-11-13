@@ -26,9 +26,14 @@ export async function createDecoderWorker(): Promise<DecoderWorker> {
       worker.addEventListener("messageerror", messageError);
       return () => {
         worker.removeEventListener("message", message);
+        worker.addEventListener("error", preventRetiredWorkerError);
         worker.removeEventListener("error", error);
         worker.removeEventListener("messageerror", messageError);
       };
     },
   };
+}
+
+function preventRetiredWorkerError(event: Event): void {
+  event.preventDefault();
 }

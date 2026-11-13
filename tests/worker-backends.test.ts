@@ -115,6 +115,10 @@ describe("browser worker transport", () => {
     cleanup();
     native.dispatchEvent(new MessageEvent("message", { data: response }));
     expect(onMessage).toHaveBeenCalledOnce();
+    const lateError = new Event("error", { cancelable: true });
+    native.dispatchEvent(lateError);
+    expect(lateError.defaultPrevented).toBe(true);
+    expect(onFailure).toHaveBeenCalledTimes(3);
     await worker.terminate();
     expect(native.terminate).toHaveBeenCalledOnce();
   });

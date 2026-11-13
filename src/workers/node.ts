@@ -26,6 +26,8 @@ export function createNodeWorker(
       worker.on("messageerror", messageError);
       return () => {
         worker.off("message", onMessage);
+        // A pending error event may arrive after cancellation removed the job listeners.
+        worker.on("error", ignoreRetiredWorkerError);
         worker.off("error", onFailure);
         worker.off("exit", exit);
         worker.off("messageerror", messageError);
@@ -33,3 +35,5 @@ export function createNodeWorker(
     },
   };
 }
+
+function ignoreRetiredWorkerError(): void {}

@@ -90,7 +90,15 @@ try {
   await page.waitForFunction(() => typeof window.__heicraftConvertHeic === "function");
 
   await Promise.race([
-    checkConversions(page),
+    (async () => {
+      await checkConversions(page);
+      assert.deepEqual(
+        await page.evaluate(() => window.__workerStats),
+        { created: 1, posted: 3, terminated: 0 },
+        "Browser conversions must reuse a real decoder worker.",
+      );
+      await checkWorkerCancellation(page);
+    })(),
     new Promise((_, reject) => {
       conversionTimeout = setTimeout(
         () => reject(new Error("Real conversion smoke test timed out after 60 seconds.")),
@@ -98,12 +106,6 @@ try {
       );
     }),
   ]);
-  assert.deepEqual(
-    await page.evaluate(() => window.__workerStats),
-    { created: 1, posted: 3, terminated: 0 },
-    "Browser conversions must reuse a real decoder worker.",
-  );
-  await checkWorkerCancellation(page);
   assert.deepEqual(pageErrors, [], "Browser smoke test encountered uncaught page errors.");
 } finally {
   clearTimeout(conversionTimeout);
