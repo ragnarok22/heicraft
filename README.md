@@ -25,6 +25,7 @@ import { convertHeic } from "heicraft";
 
 const input = document.querySelector<HTMLInputElement>("input[type=file]");
 const preview = document.querySelector<HTMLImageElement>("img");
+let previewUrl: string | undefined;
 
 input?.addEventListener("change", async () => {
   const file = input.files?.[0];
@@ -37,10 +38,16 @@ input?.addEventListener("change", async () => {
     quality: 0.9,
   });
 
-  const url = URL.createObjectURL(result.data);
-  preview.src = url;
+  const previousUrl = previewUrl;
+  previewUrl = URL.createObjectURL(result.data);
+  preview.src = previewUrl;
+  if (previousUrl) {
+    URL.revokeObjectURL(previousUrl);
+  }
 });
 ```
+
+Keep the current object URL while the preview is in use. When removing the preview or unmounting its component, also call `URL.revokeObjectURL(previewUrl)` if `previewUrl` is set.
 
 Browser conversion uses HEIC decoding plus a DOM canvas for output encoding. WebP output depends on the browser's canvas WebP support.
 
@@ -281,6 +288,8 @@ Custom errors:
 - `UnsupportedFormatError`
 - `ConversionError`
 - `AbortError`
+
+Wrapped errors retain the underlying failure in `cause`. Decoder errors crossing a worker boundary preserve diagnostic fields (`name`, `message`, `stack`) and up to eight cause entries.
 
 ## Known Limitations
 
