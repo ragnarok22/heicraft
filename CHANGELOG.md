@@ -2,6 +2,57 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.0
+
+Version 0.2.0 was intentionally skipped to reflect the scope of this update.
+
+### Added
+
+- Reusable browser workers and a bounded Node.js worker pool, with cancellation
+  during input reading, queued work, and active worker operations.
+- Worker-side browser encoding using OffscreenCanvas when available, with a DOM
+  canvas fallback. Idle workers release their memory after 30 seconds.
+- Configurable input-byte and pixel-count limits, enforced before input loading
+  and RGBA allocation where applicable, with typed `ResourceLimitError` failures.
+- Dimensions and image-count inspection without decoding pixels, plus opt-in
+  transparency inspection through `getHeicInfo(input, { inspectAlpha: true })`.
+- Real-image integration tests for JPEG, PNG, WebP, rotation, and transparency.
+- Cross-runtime smoke tests against the actual npm tarball in Node.js and Chromium,
+  including worker cancellation, OffscreenCanvas, and DOM fallback paths.
+
+### Changed
+
+- Use libheif-js directly, supporting compatible brands and extended-size HEIF
+  headers without modifying input bytes.
+- Keep complete conversions admitted until output encoding finishes, bounding
+  concurrent encoders as well as pending decoder work.
+- Inspect only the required input ranges for detection, scan brands without
+  per-brand allocations, and yield during large scans to preserve responsiveness.
+- Avoid redundant copies of decoded pixel buffers and preserve typed-array ranges.
+- Preserve error causes and decoder diagnostics across worker boundaries.
+- Support maintained Node.js LTS lines 22 (22.13.0+), 24, and 26.
+
+### Fixed
+
+- Reject empty files, renamed JPEGs, and AVIF inputs instead of trusting extensions
+  or MIME hints. Distinguish HEVC, AV1, and generic HEIF container signatures.
+- Propagate worker startup and transport failures from metadata inspection rather
+  than silently returning signature-only results.
+- Reject FIFO filesystem inputs without blocking while waiting for a writer.
+- Validate release tags without shell expansion, retaining useful mismatch messages.
+- Check file growth and input limits while reading, and preserve cancellation errors
+  when backend operations fail.
+
+### Migration Notes
+
+- Detection now requires a binary HEVC signature; generic `mif1`/`msf1` containers
+  without an explicit HEVC brand no longer count as confirmed HEIC.
+- `hasAlpha` is omitted unless `inspectAlpha: true` is requested.
+- Default limits are 20 MiB of input and 25 million pixels. Override them explicitly
+  for larger trusted inputs.
+- Browser deployments must serve the emitted worker asset. Browsers without usable
+  OffscreenCanvas encoding also need a DOM canvas.
+
 ## 0.1.1
 
 ### Added

@@ -31,9 +31,16 @@ The package is **ESM-only** and includes TypeScript declarations.
 | Environment | Requirements                                                                                                                                                                                                       |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Node.js     | Maintained LTS lines **22** (22.13.0 or later), **24**, and **26**. Use the latest patch release of a supported line. Output encoding uses `sharp`; its native dependencies must support your deployment platform. |
-| Browser     | WebAssembly, module Web Workers, and a DOM canvas for conversion. Use a bundler that honors the package's browser mappings and emits its worker asset.                                                             |
+| Browser     | WebAssembly and module Web Workers. Encoding uses OffscreenCanvas where available, otherwise a DOM canvas. Use a bundler that honors browser mappings and emits the worker asset.                                  |
 
 The production Vite build is smoke-tested in Chromium. This is not a guarantee of compatibility with every browser or bundler. See [browser deployment requirements](#browser-deployment).
+
+### Upgrading to 0.3.0
+
+Version 0.2.0 was intentionally skipped. Detection now requires a binary HEVC
+signature, default resource limits are 20 MiB and 25 million pixels, and `hasAlpha`
+requires `inspectAlpha: true`. Browser deployments must include the worker asset.
+See the [0.3.0 migration notes](./CHANGELOG.md#030) for details.
 
 ## Node.js Usage
 
@@ -119,7 +126,7 @@ The input's `accept` attribute is only a file-picker hint, not validation. `conv
 
 - Serve the worker asset emitted by your bundler along with the application.
 - Allow the worker and WebAssembly execution under your Content Security Policy. Required directives depend on your bundler and deployment; do not disable CSP to make conversion work.
-- Browser output encoding uses a DOM canvas. WebP requires canvas WebP support; unsupported output is reported rather than silently returned as PNG.
+- Browser output encoding runs inside the decoder worker using OffscreenCanvas when supported, with a DOM canvas fallback. Unsupported output is reported rather than silently returned as PNG.
 - Worker startup failures are reported. There is no fallback to decoding on the main thread.
 
 ## Supported Inputs and Outputs
@@ -223,7 +230,7 @@ Brand handling is deliberately conservative:
 - AV1 brands: `avif`, `avis`. AV1 takes precedence over HEVC, which takes precedence over generic HEIF.
 - Filename extensions and MIME hints do not change the detected container or codec. Renaming a JPEG to `.heic` does not make it HEIC.
 
-Blob/File inputs use bounded slices; Node.js paths use partial reads. Every compatible brand is checked, including those beyond the first chunk. A size-zero `ftyp` extends to EOF and requires scanning the remaining input in bounded chunks. In-memory inputs are inspected through views without copying their contents.
+Blob/File inputs use bounded slices; Node.js paths use partial reads. Compatible brands are checked beyond the first chunk unless AV1 already determines the result. A size-zero `ftyp` extends to EOF; scans use bounded chunks and periodically yield to allow cancellation and other events. In-memory inputs are inspected through views without copying their contents.
 
 ### `getHeicInfo(input, options?)`
 
@@ -247,11 +254,11 @@ Dimensions and image count are read from image handles without rendering pixels 
 
 **`hasAlpha` is omitted by default.** With `inspectAlpha: true`, an image without an alpha channel returns `false` without rendering. Otherwise, the image is decoded and its alpha values scanned: an entirely opaque alpha channel also returns `false`.
 
-All result fields are optional. Backend parsing or rendering failures may leave only signature-derived information. Cancellation, resource-limit errors, and unsupported-runtime errors are propagated, not replaced with partial metadata. The byte and pixel limits apply even without rendering.
+All result fields are optional. Backend parsing or rendering failures may leave only signature-derived information. Cancellation, resource-limit errors, unsupported-runtime errors, and worker startup/transport failures are propagated, not replaced with partial metadata. The byte and pixel limits apply even without rendering.
 
 ## Workers and Cancellation
 
-Conversion decoding, metadata parsing, and optional transparency inspection run in reusable workers:
+Conversion decoding, metadata parsing, optional transparency inspection, and supported browser output encoding run in reusable workers:
 
 | Internal limit, per loaded library instance             | Browser      | Node.js                                  |
 | ------------------------------------------------------- | ------------ | ---------------------------------------- |
@@ -259,7 +266,7 @@ Conversion decoding, metadata parsing, and optional transparency inspection run 
 | Queued decoder jobs                                     | 8            | 8                                        |
 | Conversion/metadata calls admitted before input reading | 9            | 10                                       |
 
-Each worker handles one job at a time. Saturation throws `ResourceLimitError`. These are fixed implementation limits, not a configurable pool API or a process-wide budget. Admission is released after decoding, so it does not bound simultaneous output encoders. Detection does not use the decoder pool.
+Each worker handles one job at a time. Saturation throws `ResourceLimitError`. Admission is held until the entire operation, including output encoding, completes or fails. These are fixed implementation limits, not a configurable pool API or a process-wide budget. Detection does not use the decoder pool.
 
 All four entry points accept an `AbortSignal`:
 
@@ -279,11 +286,11 @@ try {
 }
 ```
 
-Cancelling removes a queued job or terminates the worker running it, without cancelling other calls. Replacement workers are created as needed; Node.js waits for termination before reusing capacity. Idle Node.js workers do not keep the process alive.
+Cancelling removes a queued job or terminates the worker running it, without cancelling other calls. This also interrupts browser encoding when it runs in that worker. Replacement workers are created as needed; Node.js waits for termination before reusing capacity. Workers terminate after 30 seconds of inactivity to release their WASM memory. Idle Node.js workers and their cleanup timers do not keep the process alive.
 
 With a signal, full Node.js file reads use abortable, byte-capped streams and Blob/File reads cancel their stream reader. Partial file detection checks cancellation around each bounded read. An operating-system read already in progress may still finish; no further chunks are requested after cancellation.
 
-Cancellation **does not interrupt an already-running Sharp or `canvas.toBlob()` encoder**. Conversion checks the signal after encoding instead.
+Cancellation **does not interrupt an already-running Sharp or fallback DOM `canvas.toBlob()` encoder**. Conversion checks the signal after encoding instead, retaining its admission slot until that encoder finishes.
 
 Caller-owned buffers are never transferred or detached. The library transfers an internal input copy and returns worker-owned RGBA using transferables.
 
@@ -305,7 +312,7 @@ const result = await convertHeic("./photo.heic", {
 ```
 
 - Blob/File sizes are checked before reading any bytes.
-- Node.js paths are checked on the opened file. Full reads remain byte-capped if the file grows; partial detection rechecks file size before returning.
+- Node.js paths are checked on the opened file and non-regular files are rejected. Nonblocking opening avoids waiting for a FIFO writer on supported platforms. Full reads remain byte-capped if the file grows; partial detection rechecks file size before returning.
 - For in-memory inputs, the limit applies to the supplied view's byte length and cannot undo allocations already made by the caller.
 - Dimensions are checked on libheif's image handle before allocating RGBA or rendering pixels.
 
@@ -351,7 +358,7 @@ Wrapped errors retain the underlying failure in `cause`. Decoder errors crossing
 - Conversion re-encodes pixels; do not rely on source EXIF or color-profile metadata being preserved.
 - AVIF and generic HEIF signatures without a HEVC brand are not accepted for conversion or metadata inspection.
 - A recognized signature does not guarantee backend support. For example, `heim`/`heis` alone require a supported compatible brand such as `mif1` for the current libheif backend.
-- Browser conversion needs a DOM canvas and a working decoder worker; WebP support depends on the canvas encoder.
+- Browser conversion needs a working decoder worker and either OffscreenCanvas encoding or a DOM canvas fallback. WebP support depends on the selected platform encoder.
 
 ## Project Documents
 

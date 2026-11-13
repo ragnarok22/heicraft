@@ -43,8 +43,8 @@ Image parsing, decompression, and encoding are resource-intensive operations ove
 
 - The default input-size limit is **20 MiB** for all public entry points.
 - Conversion and metadata inspection default to **25 million pixels** for the image being inspected. Dimensions are checked before allocating output RGBA or rendering pixels.
-- Decoder work has bounded admission and queue sizes per loaded library instance.
-- `AbortSignal` can cancel input reading, queued decoding, or an active decoder worker.
+- Conversion and metadata work have bounded admission and decoder queue sizes per loaded library instance. Conversion admission is retained through output encoding.
+- `AbortSignal` can cancel input reading, queued decoding, or an active worker, including worker-side browser encoding.
 
 See [Resource Limits](./README.md#resource-limits) and [Workers and Cancellation](./README.md#workers-and-cancellation) for exact API behavior.
 
@@ -54,8 +54,8 @@ See [Resource Limits](./README.md#resource-limits) and [Workers and Cancellation
 - Byte and pixel limits are **not total memory, CPU, or execution-time budgets**. The backend parses compressed data before dimensions can be checked, and parsing, decoding, and encoding can allocate additional memory.
 - Metadata inspection still loads the complete compressed input. Opt-in transparency inspection may also decode pixels.
 - Worker-based decoding improves responsiveness and cancellation; it is **not a security sandbox**. In particular, Node.js worker threads share a process.
-- Internal decoder limits are not process-wide request or encoding-concurrency limits.
-- Cancellation does not interrupt an already-running Sharp or canvas encoder. A rejected or cancelled call is not a hard execution deadline.
+- Internal admission limits include output encoding but are not process-wide request or memory limits.
+- Cancellation does not interrupt an already-running Sharp or fallback DOM canvas encoder. A rejected or cancelled call is not a hard execution deadline.
 
 ### Application Responsibilities
 

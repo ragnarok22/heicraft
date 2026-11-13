@@ -16,7 +16,6 @@ Run the main checks:
 pnpm run format:check
 pnpm run lint
 pnpm run typecheck
-pnpm test
 pnpm run coverage
 pnpm run build
 ```
@@ -41,11 +40,15 @@ The integration tests require the committed MIT-licensed
 [`pattern.heic`](./tests/fixtures/README.md) fixture. They convert it to JPEG,
 PNG, and WebP and decode the pixels, rather than only inspecting image headers.
 
-The browser smoke test builds a production Vite bundle from the package entry
-point and runs real conversions in headless Chromium. It also cross-decodes Node
+The browser smoke test packs and extracts the actual npm artifact, reuses the
+installed runtime dependencies offline, and builds a production Vite bundle from
+that artifact. It runs real conversions in headless Chromium and cross-decodes Node
 outputs with Chromium and browser outputs with Sharp, checking file signatures,
 dimensions, and the fixture's quadrant colors. No conversion backends are mocked,
-and a missing fixture or browser fails the check rather than skipping it.
+and a missing fixture or browser fails the check rather than skipping it. It also
+checks OffscreenCanvas encoding, the DOM fallback, worker cancellation, rotation,
+and transparency. Use `pnpm test` for quick feedback without coverage; do not run
+both test commands unless there is a specific reason to repeat the suite.
 
 Install Chromium once, then build and run the smoke test:
 

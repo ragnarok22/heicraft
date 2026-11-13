@@ -15,10 +15,11 @@ For usage and API behavior, see the [README](./README.md). For released changes,
 - ESM output and exported TypeScript declarations.
 - Signature-based detection that distinguishes HEVC, AV1, and generic HEIF brands.
 - Basic dimensions and image-count inspection without rendering, plus opt-in transparency inspection.
-- Browser Web Worker decoding and a bounded Node.js worker pool.
+- Browser Web Worker decoding and OffscreenCanvas encoding, with a DOM fallback.
+- A bounded Node.js worker pool and automatic idle-worker cleanup.
 - Cancellation during input reading, queueing, and active decoding.
-- Default input-byte and pixel-count limits, bounded decoder admission, and typed errors.
-- Real-image integration tests and a production Vite/Chromium smoke test.
+- Default input-byte and pixel-count limits, complete-operation admission limits, and typed errors.
+- Real-image integration tests and a production Vite/Chromium smoke test of the npm tarball.
 - CI checks for formatting, linting, types, tests, and package builds.
 
 ### Maintenance Priorities
