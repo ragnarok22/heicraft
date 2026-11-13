@@ -155,6 +155,32 @@ describe("libheif decoder adapter", () => {
     });
   });
 
+  it.each([false, true])(
+    "normalizes RGB only for premultiplied alpha (premultiplied: %s)",
+    async (premultiplied) => {
+      const image = mockImage(5, 1);
+      image.is_premultiplied_alpha.mockReturnValue(premultiplied);
+      const pixels = [100, 50, 25, 128, 17, 34, 51, 0, 12, 34, 56, 255, 1, 0, 0, 1, 200, 0, 0, 128];
+      let renderedData: Uint8ClampedArray | undefined;
+      image.display.mockImplementation((frame, callback) => {
+        frame.data.set(pixels);
+        renderedData = frame.data;
+        callback(frame);
+      });
+      backend.decode.mockReturnValue([image]);
+
+      const result = await decodeHeic(new Uint8Array([1]));
+
+      expect(result.data).toBe(renderedData);
+      expect([...result.data]).toEqual(
+        premultiplied
+          ? [199, 100, 50, 128, 0, 0, 0, 0, 12, 34, 56, 255, 255, 0, 0, 1, 255, 0, 0, 128]
+          : pixels,
+      );
+      expect(image.free).toHaveBeenCalledOnce();
+    },
+  );
+
   it.each([
     [0, 1],
     [-1, 1],
@@ -257,6 +283,7 @@ function mockImage(width = 2, height = 1) {
     get_width: () => width,
     get_height: () => height,
     has_alpha_channel: vi.fn(() => true),
+    is_premultiplied_alpha: vi.fn(() => false),
     display: vi.fn<HeifImage["display"]>(),
     free: vi.fn(),
   };

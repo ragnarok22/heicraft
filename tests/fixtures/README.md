@@ -29,3 +29,18 @@ heif-enc -L --rotate-cw 90 -o oriented-alpha.heic oriented-alpha.png
 
 The HEIF rotation presents a 24 × 40 image. Tests check rotated color samples and
 the real auxiliary alpha image, rather than relying on mocked decoder pixels.
+
+## Premultiplied alpha
+
+`premultiplied-alpha.heic` is an original procedural 32 × 32 image under the MIT
+license. Every pixel stores premultiplied RGBA `(100, 50, 25, 128)`, corresponding
+to straight RGBA approximately `(199, 100, 50, 128)`. The PNG raster containing
+those premultiplied channel values was encoded with libheif 1.23.7:
+
+```sh
+heif-enc -L --premultiplied-alpha -o premultiplied-alpha.heic premultiplied-alpha.png
+```
+
+The HEIC declares its premultiplied alpha via a `prem` item reference. Tests
+verify that conversion removes the premultiplication before output encoding,
+rather than darkening translucent pixels.

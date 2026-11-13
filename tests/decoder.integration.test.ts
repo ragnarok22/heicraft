@@ -6,6 +6,25 @@ import { convertHeic, detectHeic, getHeicInfo, ResourceLimitError } from "../src
 const fixture = await readFile(new URL("./fixtures/pattern.heic", import.meta.url));
 
 describe("real HEIC conversion", () => {
+  it.each(["jpeg", "png", "webp"] as const)(
+    "does not darken premultiplied alpha when encoding %s",
+    async (format) => {
+      const input = await readFile(new URL("./fixtures/premultiplied-alpha.heic", import.meta.url));
+      const result = await convertHeic(input, { format, quality: 1 });
+      if (!(result.data instanceof Uint8Array)) throw new Error("Expected Node.js output bytes.");
+      const { data, info } = await sharp(result.data)
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      expect(info).toMatchObject({ width: 32, height: 32, channels: 4 });
+      // JPEG composites onto black; PNG/WebP must retain straight RGB and alpha.
+      const expected = format === "jpeg" ? [100, 50, 25, 255] : [199, 100, 50, 128];
+      for (let channel = 0; channel < 4; channel++) {
+        expect(Math.abs(data[channel] - expected[channel])).toBeLessThanOrEqual(2);
+      }
+    },
+  );
+
   it("applies HEIF rotation and preserves non-opaque alpha on a non-square image", async () => {
     const input = await readFile(new URL("./fixtures/oriented-alpha.heic", import.meta.url));
     await expect(getHeicInfo(input, { inspectAlpha: true })).resolves.toMatchObject({

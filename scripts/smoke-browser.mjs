@@ -23,6 +23,7 @@ let convertHeic;
 try {
   const packageRoot = await unpackPackage();
   ({ convertHeic } = await import(pathToFileURL(join(packageRoot, "dist/index.js")).href));
+  await checkEntrypointErrors(packageRoot);
   await writeFile(
     join(directory, "index.js"),
     'import { convertHeic, detectHeic, getHeicInfo } from "heicraft"; Object.assign(window, { __heicraftConvertHeic: convertHeic, __heicraftDetectHeic: detectHeic, __heicraftGetHeicInfo: getHeicInfo });\n',
@@ -108,6 +109,7 @@ try {
       await checkWorkerCancellation(page);
       await checkBrowserEncodingPaths(page);
       await checkOrientedAlpha(page);
+      await checkPremultipliedAlpha(page);
       await checkCrossRealmInputs(page);
     })(),
     new Promise((_, reject) => {
@@ -166,6 +168,23 @@ async function unpackPackage() {
   }
   console.log(`Testing npm artifact ${packed.filename}.`);
   return packageRoot;
+}
+
+async function checkEntrypointErrors(packageRoot) {
+  const main = await import(pathToFileURL(join(packageRoot, "dist/index.js")).href);
+  const detection = await import(pathToFileURL(join(packageRoot, "dist/detect.js")).href);
+  for (const name of ["HeicraftError", "InvalidInputError", "ResourceLimitError", "AbortError"]) {
+    assert.equal(detection[name], main[name], `${name} must be shared across entrypoints.`);
+  }
+  await assert.rejects(detection.detectHeic(null), main.InvalidInputError);
+  await assert.rejects(
+    detection.detectHeic(new Uint8Array(2), { maxInputBytes: 1 }),
+    main.ResourceLimitError,
+  );
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(detection.isHeic(fixture, { signal: controller.signal }), main.AbortError);
+  console.log("Packed entrypoints share typed error constructors.");
 }
 
 async function checkDetectionBundle() {
@@ -282,6 +301,21 @@ async function checkOrientedAlpha(page) {
     assert.ok(Math.abs(data[(y * info.width + x) * 4 + 3] - alpha) <= 1);
   }
   console.log(`Non-square HEIC rotation and transparency passed in ${browserName}.`);
+}
+
+async function checkPremultipliedAlpha(page) {
+  const input = await readFile(
+    new URL("../tests/fixtures/premultiplied-alpha.heic", import.meta.url),
+  );
+  const result = await page.evaluate(async (bytes) => {
+    const result = await window.__heicraftConvertHeic(new Uint8Array(bytes), { format: "png" });
+    return Array.from(new Uint8Array(await result.data.arrayBuffer()));
+  }, Array.from(input));
+  const data = await sharp(Buffer.from(result)).ensureAlpha().raw().toBuffer();
+  for (const [channel, expected] of [199, 100, 50, 128].entries()) {
+    assert.ok(Math.abs(data[channel] - expected) <= 2);
+  }
+  console.log(`Premultiplied HEIC alpha conversion passed in ${browserName}.`);
 }
 
 async function checkWorkerCancellation(page) {

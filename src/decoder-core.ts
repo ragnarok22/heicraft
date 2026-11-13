@@ -91,17 +91,32 @@ function renderImage(image: HeifImage, width: number, height: number): Promise<D
   const data = new Uint8ClampedArray(width * height * 4);
   return new Promise((resolve, reject) => {
     try {
+      const premultiplied = image.is_premultiplied_alpha();
       image.display({ width, height, data }, (rendered) => {
         if (!rendered) {
           reject(new ConversionError("HEIF processing error"));
           return;
         }
+        // Sharp and ImageData expect straight RGBA, but libheif preserves association.
+        if (premultiplied) unpremultiplyAlpha(rendered.data);
         resolve(rendered);
       });
     } catch (error) {
       reject(new ConversionError("HEIF processing error", { cause: error }));
     }
   });
+}
+
+function unpremultiplyAlpha(data: Uint8Array | Uint8ClampedArray): void {
+  for (let index = 0; index < data.byteLength; index += 4) {
+    const alpha = data[index + 3];
+    if (alpha === 255) continue;
+    // Fully transparent pixels have no recoverable RGB; clear them without dividing by zero.
+    const scale = alpha === 0 ? 0 : 255 / alpha;
+    for (let channel = 0; channel < 3; channel++) {
+      data[index + channel] = Math.min(255, Math.round(data[index + channel] * scale));
+    }
+  }
 }
 
 function hasNonOpaquePixels(data: Uint8Array | Uint8ClampedArray): boolean {
