@@ -166,9 +166,9 @@ importers:
 
   .:
     dependencies:
-      heic-decode:
-        specifier: ^2.1.0
-        version: 2.1.0
+      libheif-js:
+        specifier: ^1.23.5
+        version: 1.23.5
       sharp:
         specifier: ^0.35.5
         version: 0.35.5(@types/node@26.6.6)
@@ -1029,10 +1029,6 @@ packages:
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
     engines: {node: '>=8'}
-
-  heic-decode@2.1.0:
-    resolution: {integrity: sha512-0fB3O3WMk38+PScbHLVp66jcNhsZ/ErtQ6u2lMYu/YxXgbBtl+oKOhGQHa4RpvE68k8IzbWkABzHnyAIjR758A==}
-    engines: {node: '>=8.0.0'}
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
@@ -2003,10 +1999,6 @@ snapshots:
     optional: true
 
   has-flag@4.0.0: {}
-
-  heic-decode@2.1.0:
-    dependencies:
-      libheif-js: 1.23.5
 
   html-escaper@2.0.2: {}
 

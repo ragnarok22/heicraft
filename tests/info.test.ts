@@ -1,13 +1,13 @@
-import decode from "heic-decode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getHeicInfo, InvalidInputError } from "../src";
+import { decodeHeic } from "../src/decoder";
 import { CountingBlob, createFtypBytes } from "./helpers";
 
-vi.mock("heic-decode", () => ({
-  default: vi.fn(),
+vi.mock("../src/decoder", () => ({
+  decodeHeic: vi.fn(),
 }));
 
-const decodeMock = vi.mocked(decode);
+const decodeMock = vi.mocked(decodeHeic);
 
 describe("getHeicInfo", () => {
   beforeEach(() => {

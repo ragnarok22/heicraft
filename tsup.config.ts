@@ -12,5 +12,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   splitting: false,
-  external: ["heic-decode", "sharp", "node:fs/promises", "node:module"],
+  external: ["libheif-js/wasm-bundle", "sharp", "node:fs/promises", "node:module"],
 });

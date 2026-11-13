@@ -1,14 +1,44 @@
+import type { HeifImage } from "libheif-js/wasm-bundle";
 import type { DecodedImage } from "./types";
 
-type HeicDecodeModule = {
-  default?: HeicDecodeFunction;
-} & HeicDecodeFunction;
-
-type HeicDecodeFunction = (options: { buffer: Uint8Array }) => Promise<DecodedImage>;
-
 export async function decodeHeic(bytes: Uint8Array): Promise<DecodedImage> {
-  const decodeModule = (await import("heic-decode")) as HeicDecodeModule;
-  const decode = decodeModule.default ?? decodeModule;
+  const { default: libheif } = await import("libheif-js/wasm-bundle");
+  await libheif.ready;
 
-  return decode({ buffer: bytes });
+  const decoder = new libheif.HeifDecoder();
+  let images: HeifImage[] = [];
+
+  try {
+    // Let libheif parse the original BMFF headers, including compatible brands
+    // and extended-size boxes, rather than checking a brand at a fixed offset.
+    images = decoder.decode(bytes);
+    const image = images[0];
+    if (!image) {
+      throw new Error("HEIF image not found");
+    }
+
+    const width = image.get_width();
+    const height = image.get_height();
+    const data = new Uint8ClampedArray(width * height * 4);
+
+    // Rendering is asynchronous; keep the native handles alive until it completes.
+    return await new Promise<DecodedImage>((resolve, reject) => {
+      image.display({ width, height, data }, (rendered) => {
+        if (!rendered) {
+          reject(new Error("HEIF processing error"));
+          return;
+        }
+
+        resolve(rendered);
+      });
+    });
+  } finally {
+    for (const image of images) {
+      image.free();
+    }
+    if (decoder.decoder) {
+      libheif.heif_context_free(decoder.decoder);
+      decoder.decoder = null;
+    }
+  }
 }

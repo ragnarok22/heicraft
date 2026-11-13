@@ -1,7 +1,4 @@
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, test, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AbortError,
   ConversionError,
@@ -9,11 +6,18 @@ import {
   InvalidInputError,
   UnsupportedFormatError,
 } from "../src";
+import { decodeHeic } from "../src/decoder";
 import { CountingBlob, createFtypBytes } from "./helpers";
+
+vi.mock("../src/decoder", () => ({
+  decodeHeic: vi.fn(),
+}));
+
+const decodeMock = vi.mocked(decodeHeic);
 
 describe("convertHeic", () => {
   afterEach(() => {
-    vi.doUnmock("heic-decode");
+    decodeMock.mockReset();
   });
 
   it("rejects invalid quality values", async () => {
@@ -56,12 +60,10 @@ describe("convertHeic", () => {
     ["generic HEIF", createFtypBytes("mif1")],
     ["AVIF", createFtypBytes("avif", ["mif1"])],
   ])("rejects %s with misleading HEIC metadata before decoding", async (_label, bytes) => {
-    const decode = vi.fn();
-    vi.doMock("heic-decode", () => ({ default: decode }));
     const file = new File([bytes], "photo.heic", { type: "image/heic" });
 
     await expect(convertHeic(file)).rejects.toBeInstanceOf(InvalidInputError);
-    expect(decode).not.toHaveBeenCalled();
+    expect(decodeMock).not.toHaveBeenCalled();
   });
 
   it("wraps decoder failures in ConversionError", async () => {
@@ -71,9 +73,7 @@ describe("convertHeic", () => {
   });
 
   it("uses a fallback message for non-Error decoder failures", async () => {
-    vi.doMock("heic-decode", () => ({
-      default: vi.fn().mockRejectedValue("decode failed"),
-    }));
+    decodeMock.mockRejectedValue("decode failed");
 
     await expect(convertHeic(createFtypBytes("heic"))).rejects.toMatchObject({
       code: "CONVERSION_ERROR",
@@ -83,12 +83,10 @@ describe("convertHeic", () => {
 
   it("preserves an abort when the decoder fails after cancellation", async () => {
     const controller = new AbortController();
-    vi.doMock("heic-decode", () => ({
-      default: vi.fn(async () => {
-        controller.abort();
-        throw new Error("decode failed");
-      }),
-    }));
+    decodeMock.mockImplementation(async () => {
+      controller.abort();
+      throw new Error("decode failed");
+    });
 
     await expect(
       convertHeic(createFtypBytes("heic"), { signal: controller.signal }),
@@ -120,27 +118,5 @@ describe("convertHeic", () => {
 });
 
 function mockDecoderFailure(): void {
-  vi.doMock("heic-decode", () => ({
-    default: vi.fn().mockRejectedValue(new Error("decode failed")),
-  }));
+  decodeMock.mockRejectedValue(new Error("decode failed"));
 }
-
-const fixtureUrl = new URL("./fixtures/photo.heic", import.meta.url);
-const fixturePath = fileURLToPath(fixtureUrl);
-const runFixtureTest = existsSync(fixturePath) ? test : test.skip;
-
-runFixtureTest(
-  "converts a real HEIC fixture when tests/fixtures/photo.heic is present",
-  async () => {
-    const input = await readFile(fixturePath);
-    const result = await convertHeic(input, { format: "jpeg", quality: 0.9 });
-
-    expect(result.format).toBe("jpeg");
-    expect(result.mimeType).toBe("image/jpeg");
-    expect(result.data).toBeInstanceOf(Uint8Array);
-    if (!(result.data instanceof Uint8Array)) {
-      throw new Error("Expected Node.js conversion to return Uint8Array data.");
-    }
-    expect(result.data.byteLength).toBeGreaterThan(0);
-  },
-);

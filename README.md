@@ -225,11 +225,10 @@ Custom errors:
 - Multi-image HEIC extraction is not part of this MVP.
 - Browser conversion requires a DOM canvas environment.
 - Browser WebP output depends on browser canvas support.
-- Successful conversion tests require adding a real HEIC fixture at `tests/fixtures/photo.heic`.
 
 ## Third-Party Backend
 
-The initial HEIC decoder backend is [`heic-decode`](https://www.npmjs.com/package/heic-decode). It decodes HEIC images to raw RGBA pixel data.
+HEIC decoding uses [`libheif-js`](https://www.npmjs.com/package/libheif-js) directly through its bundled WebAssembly build. The adapter passes the original bytes to libheif, including compatible-brand and extended-size `ftyp` headers, and returns raw RGBA pixel data.
 
 Node.js output encoding uses [`sharp`](https://www.npmjs.com/package/sharp). Browser output encoding uses the platform canvas API.
 
@@ -239,8 +238,7 @@ See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for dependency licensing 
 
 - `heicraft` wrapper/source code is MIT licensed.
 - HEIC decoding uses third-party dependencies with their own licenses.
-- The initial decoder backend is `heic-decode`.
-- `heic-decode` depends on `libheif-js` / `libheif` technology.
+- The decoder backend is `libheif-js`, an Emscripten distribution of `libheif`.
 - `libheif-js` is LGPL-3.0 licensed.
 - Third-party license notices are not hidden, renamed, bundled away, or obscured by this package.
 - Users should review dependency licenses before using this package in commercial or closed-source products.

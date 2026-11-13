@@ -18,7 +18,7 @@ type SharpCalls = {
 describe("convertHeic with mocked backends", () => {
   afterEach(() => {
     vi.resetModules();
-    vi.doUnmock("heic-decode");
+    vi.doUnmock("../src/decoder");
     vi.doUnmock("sharp");
     vi.doUnmock("../src/utils/environment");
     vi.unstubAllGlobals();
@@ -236,8 +236,8 @@ describe("convertHeic with mocked backends", () => {
 });
 
 function mockDecoder(): void {
-  vi.doMock("heic-decode", () => ({
-    default: vi.fn().mockResolvedValue(decodedImage),
+  vi.doMock("../src/decoder", () => ({
+    decodeHeic: vi.fn().mockResolvedValue(decodedImage),
   }));
 }
 
@@ -246,8 +246,8 @@ function mockDecoderAndSharp(
   error?: unknown,
   beforeResolve?: () => void,
 ): SharpCalls {
-  vi.doMock("heic-decode", () => ({
-    default: vi.fn().mockResolvedValue(decodedImage),
+  vi.doMock("../src/decoder", () => ({
+    decodeHeic: vi.fn().mockResolvedValue(decodedImage),
   }));
 
   const toBuffer = vi.fn(async () => {
