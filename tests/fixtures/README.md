@@ -13,4 +13,5 @@ sips --setProperty format heic pattern.png --out pattern.heic
 
 Integration tests replace the `ftyp` contents without changing the box length.
 This preserves the image payload and all item offsets while exercising different
-major/compatible brands and extended-size box headers.
+major/compatible brands and extended-size box headers. The `heim`/`heis` variants
+retain generic `mif1` compatibility; libheif does not accept those brands alone.

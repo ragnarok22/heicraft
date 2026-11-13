@@ -225,6 +225,7 @@ Custom errors:
 - Multi-image HEIC extraction is not part of this MVP.
 - Browser conversion requires a DOM canvas environment.
 - Browser WebP output depends on browser canvas support.
+- Native decoding still requires a libheif-supported container and codec profile. In particular, `heim`/`heis` alone are not accepted without a supported compatible brand such as `mif1`.
 
 ## Third-Party Backend
 

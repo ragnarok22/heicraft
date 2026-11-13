@@ -64,8 +64,9 @@ function withFtypHeader(majorBrand: string | undefined, extended: boolean): Buff
     bytes.writeBigUInt64BE(BigInt(boxSize), 8);
   }
   bytes.write(majorBrand, headerSize, "ascii");
+  const compatibleBrand = majorBrand === "heim" || majorBrand === "heis" ? "mif1" : "heic";
   for (let offset = headerSize + 8; offset + 4 <= boxSize; offset += 4) {
-    bytes.write("heic", offset, "ascii");
+    bytes.write(compatibleBrand, offset, "ascii");
   }
 
   return bytes;
