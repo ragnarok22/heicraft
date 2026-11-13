@@ -107,6 +107,30 @@ describe("libheif decoder adapter", () => {
     expect(image.free).toHaveBeenCalledOnce();
   });
 
+  it("leaves premultiplied RGB untouched when only inspecting alpha", async () => {
+    const image = mockImage();
+    image.is_premultiplied_alpha.mockReturnValue(true);
+    const pixels = [100, 50, 25, 128, 0, 0, 0, 0];
+    let renderedData: Uint8ClampedArray | undefined;
+    image.display.mockImplementation((frame, callback) => {
+      frame.data.set(pixels);
+      renderedData = frame.data;
+      callback(frame);
+    });
+    backend.decode.mockReturnValue([image]);
+
+    await expect(readHeicMetadata(new Uint8Array([1]), 2, true)).resolves.toEqual({
+      width: 2,
+      height: 1,
+      imagesCount: 1,
+      hasAlpha: true,
+    });
+    expect(Array.from(renderedData ?? [])).toEqual(pixels);
+    expect(image.is_premultiplied_alpha).not.toHaveBeenCalled();
+    expect(image.free).toHaveBeenCalledOnce();
+    expect(backend.freeContext).toHaveBeenCalledExactlyOnceWith(42);
+  });
+
   it("preserves dimensions and releases handles if optional alpha rendering fails", async () => {
     const image = mockImage();
     image.display.mockImplementation((_frame, callback) => callback(null));

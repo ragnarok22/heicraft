@@ -3,8 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
-import { AbortError, detectHeic, InvalidInputError, isHeic } from "../src";
-import { CountingBlob, createFtypBytes } from "./helpers";
+import {
+  AbortError,
+  convertHeic,
+  detectHeic,
+  getHeicInfo,
+  InvalidInputError,
+  isHeic,
+} from "../src";
 import { assertNonEmptyInput, normalizeInput } from "../src/utils/input";
 import {
   getHeicExtension,
@@ -13,6 +19,7 @@ import {
   getOutputMimeType,
   normalizeQuality,
 } from "../src/utils/mime";
+import { CountingBlob, createFtypBytes } from "./helpers";
 
 describe("input utilities", () => {
   it("does not read an input when its signal is already aborted", async () => {
@@ -83,6 +90,25 @@ describe("input utilities", () => {
 
     await expect(normalizeInput(buffer)).resolves.toEqual({ bytes: new Uint8Array([1, 2, 3]) });
   });
+
+  it.each(["ArrayBuffer", "Uint8Array"])(
+    "rejects detached %s input with a typed error and preserves its cause",
+    async (type) => {
+      const bytes = new Uint8Array(16);
+      const input = type === "ArrayBuffer" ? bytes.buffer : bytes;
+      structuredClone(bytes.buffer, { transfer: [bytes.buffer] });
+
+      for (const inspect of [detectHeic, convertHeic, getHeicInfo]) {
+        const result = inspect(input);
+        await expect(result).rejects.toBeInstanceOf(InvalidInputError);
+        await expect(result).rejects.toMatchObject({
+          code: "INVALID_INPUT",
+          cause: expect.any(TypeError),
+        });
+      }
+      await expect(isHeic(input)).resolves.toBe(false);
+    },
+  );
 
   it("normalizes a Blob without MIME metadata", async () => {
     const blob = new Blob([new Uint8Array([1, 2, 3])]);

@@ -102,16 +102,21 @@ export async function normalizeInput(
     };
   }
 
-  if (isArrayBuffer(input)) {
-    assertInputSize(input.byteLength, maxInputBytes);
-    return { bytes: new Uint8Array(input) };
-  }
+  try {
+    if (isArrayBuffer(input)) {
+      assertInputSize(input.byteLength, maxInputBytes);
+      return { bytes: new Uint8Array(input) };
+    }
 
-  if (ArrayBuffer.isView(input)) {
-    assertInputSize(input.byteLength, maxInputBytes);
-    return {
-      bytes: new Uint8Array(input.buffer, input.byteOffset, input.byteLength),
-    };
+    if (ArrayBuffer.isView(input)) {
+      assertInputSize(input.byteLength, maxInputBytes);
+      return {
+        bytes: new Uint8Array(input.buffer, input.byteOffset, input.byteLength),
+      };
+    }
+  } catch (error) {
+    if (error instanceof ResourceLimitError) throw error;
+    throw new InvalidInputError("Unable to read binary input.", { cause: error });
   }
 
   throw new InvalidInputError(

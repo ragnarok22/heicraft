@@ -5,9 +5,12 @@ import { assertPixelCount, resolveMaxPixels } from "./utils/limits.ts";
 
 export async function decodeHeic(bytes: Uint8Array, maxPixels?: number): Promise<DecodedImage> {
   const pixelLimit = resolveMaxPixels(maxPixels);
-  return withHeicImages(bytes, (image) => {
+  return withHeicImages(bytes, async (image) => {
     const { width, height } = readDimensions(image, pixelLimit);
-    return renderImage(image, width, height);
+    const decoded = await renderImage(image, width, height);
+    // Only output encoding needs straight RGB; alpha inspection can use the original pixels.
+    if (image.is_premultiplied_alpha()) unpremultiplyAlpha(decoded.data);
+    return decoded;
   });
 }
 
@@ -91,14 +94,11 @@ function renderImage(image: HeifImage, width: number, height: number): Promise<D
   const data = new Uint8ClampedArray(width * height * 4);
   return new Promise((resolve, reject) => {
     try {
-      const premultiplied = image.is_premultiplied_alpha();
       image.display({ width, height, data }, (rendered) => {
         if (!rendered) {
           reject(new ConversionError("HEIF processing error"));
           return;
         }
-        // Sharp and ImageData expect straight RGBA, but libheif preserves association.
-        if (premultiplied) unpremultiplyAlpha(rendered.data);
         resolve(rendered);
       });
     } catch (error) {
