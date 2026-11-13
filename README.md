@@ -7,6 +7,8 @@
 
 Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 
+> **Upcoming 0.3.0 documentation:** This README describes the current `main` branch, not the published **0.1.1** package. For that release, use the [0.1.1 README](https://github.com/ragnarok22/heicraft/blob/v0.1.1/README.md). Worker-based conversion, resource limits, and the enhanced detection/metadata options below are not available in 0.1.1.
+
 `heicraft` provides a TypeScript-first API for single-image conversion, signature-based detection, and basic metadata inspection. Decoding runs in workers, with per-call resource limits, cancellation, and typed errors.
 
 - [Installation](#installation)
@@ -22,9 +24,13 @@ Convert HEIC/HEIF images to JPEG, PNG, or WebP in Node.js and browsers.
 
 ## Installation
 
+Install the latest **published** release:
+
 ```sh
 npm install heicraft
 ```
+
+This does not install upcoming 0.3.0 from `main`. To try the implementation described below, build a local checkout using the [development setup](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md#development-setup). The requirements below apply to that checkout.
 
 The package is **ESM-only** and includes TypeScript declarations.
 
@@ -37,9 +43,10 @@ The production Vite build is smoke-tested in Chromium. This is not a guarantee o
 
 ### Upgrading to 0.3.0
 
-Version 0.2.0 was intentionally skipped. Detection now requires a binary HEVC
-signature, default resource limits are 20 MiB and 25 million pixels, and `hasAlpha`
-requires `inspectAlpha: true`. Browser deployments must include the worker asset.
+For the upcoming 0.3.0 release, version 0.2.0 is intentionally skipped.
+Detection requires a binary HEVC signature, default resource limits are 20 MiB
+and 25 million pixels, and `hasAlpha` requires `inspectAlpha: true`.
+Browser deployments must include the worker asset.
 See the [0.3.0 migration notes](./CHANGELOG.md#030) for details.
 
 ## Node.js Usage
@@ -122,12 +129,18 @@ Keep the current object URL while the preview is in use. When removing the previ
 
 The input's `accept` attribute is only a file-picker hint, not validation. `convertHeic` checks the binary signature itself.
 
+To run the repository's browser example, follow [Run the Browser Example](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md#run-the-browser-example).
+
 ### Browser Deployment
 
 - Serve the worker asset emitted by your bundler along with the application.
 - Allow the worker and WebAssembly execution under your Content Security Policy. Required directives depend on your bundler and deployment; do not disable CSP to make conversion work.
 - Browser output encoding runs inside the decoder worker using OffscreenCanvas when supported, with a DOM canvas fallback. Unsupported output is reported rather than silently returned as PNG.
 - Worker startup failures are reported. There is no fallback to decoding on the main thread.
+
+The OffscreenCanvas path uses `convertToBlob()` in the worker. If that API or a worker-side 2D context is unavailable, decoded pixels return to the calling thread for the DOM `canvas.toBlob()` fallback.
+
+The repository example uses a production Vite build and preview server. Development-server compatibility is not established; do not assume `vite dev` works just because the production build does.
 
 ## Supported Inputs and Outputs
 
@@ -292,7 +305,7 @@ With a signal, full Node.js file reads use abortable, byte-capped streams and Bl
 
 Cancellation **does not interrupt an already-running Sharp or fallback DOM `canvas.toBlob()` encoder**. Conversion checks the signal after encoding instead, retaining its admission slot until that encoder finishes.
 
-Caller-owned buffers are never transferred or detached. The library transfers an internal input copy and returns worker-owned RGBA using transferables.
+Caller-owned buffers are never transferred or detached. The library transfers an internal input copy. When encoding runs on the calling thread, worker-owned RGBA is returned using transferables; the OffscreenCanvas path returns an encoded `Blob` instead.
 
 ## Resource Limits
 
@@ -363,7 +376,7 @@ Wrapped errors retain the underlying failure in `cause`. Decoder errors crossing
 ## Project Documents
 
 - [Roadmap](https://github.com/ragnarok22/heicraft/blob/main/ROADMAP.md) — current foundation and future direction.
-- [Changelog](./CHANGELOG.md) — released changes.
+- [Changelog](./CHANGELOG.md) — upcoming and released changes.
 - [Contributing](https://github.com/ragnarok22/heicraft/blob/main/CONTRIBUTING.md) — development setup and contribution guidelines.
 - [Security Policy](https://github.com/ragnarok22/heicraft/blob/main/SECURITY.md) — private reporting and untrusted-input guidance.
 - [Third-Party Notices](./THIRD_PARTY_NOTICES.md) — runtime dependencies, attribution, and licensing.

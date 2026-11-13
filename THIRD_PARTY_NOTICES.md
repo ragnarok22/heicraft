@@ -2,6 +2,8 @@
 
 heicraft uses third-party software for decoding and encoding images. This document identifies the principal runtime components, how they are distributed, and where to find their source and license information.
 
+**Version scope:** These notices target upcoming 0.3.0 on `main`. For the published 0.1.1 package and its dependency stack, use the [0.1.1 notices](https://github.com/ragnarok22/heicraft/blob/v0.1.1/THIRD_PARTY_NOTICES.md) and the licenses distributed with that package.
+
 It is a licensing summary, **not an exhaustive dependency inventory, source offer, or compliance certification**. Upstream license texts and notices govern their respective components. This document is informational and is not legal advice.
 
 ## Project-Owned Code
@@ -58,7 +60,7 @@ Sharp is used for Node.js encoding, not browser canvas encoding. Its native bina
 
 ## Browser Encoding
 
-Browser output encoding uses the host browser's canvas API. heicraft does not ship that browser implementation or its encoders. Supported output types depend on the browser.
+Browser output encoding uses the host browser's OffscreenCanvas API in the decoder worker when available, or its DOM canvas API as a fallback. heicraft does not ship those browser implementations or their encoders. Supported output types depend on the selected browser encoder.
 
 ## Redistribution and Notice Preservation
 

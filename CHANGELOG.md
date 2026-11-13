@@ -2,11 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
-## 0.3.0
+## Unreleased
+
+The changes below target upcoming 0.3.0 and are not included in the published 0.1.1 package.
+
+### 0.3.0
 
 Version 0.2.0 was intentionally skipped to reflect the scope of this update.
 
-### Added
+#### Added
 
 - Reusable browser workers and a bounded Node.js worker pool, with cancellation
   during input reading, queued work, and active worker operations.
@@ -20,7 +24,7 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
 - Cross-runtime smoke tests against the actual npm tarball in Node.js and Chromium,
   including worker cancellation, OffscreenCanvas, and DOM fallback paths.
 
-### Changed
+#### Changed
 
 - Use libheif-js directly, supporting compatible brands and extended-size HEIF
   headers without modifying input bytes.
@@ -31,8 +35,10 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
 - Avoid redundant copies of decoded pixel buffers and preserve typed-array ranges.
 - Preserve error causes and decoder diagnostics across worker boundaries.
 - Support maintained Node.js LTS lines 22 (22.13.0+), 24, and 26.
+- Distinguish upcoming documentation from published-version guidance, and document
+  contributor prerequisites and local browser-example build/preview commands.
 
-### Fixed
+#### Fixed
 
 - Reject empty files, renamed JPEGs, and AVIF inputs instead of trusting extensions
   or MIME hints. Distinguish HEVC, AV1, and generic HEIF container signatures.
@@ -43,7 +49,7 @@ Version 0.2.0 was intentionally skipped to reflect the scope of this update.
 - Check file growth and input limits while reading, and preserve cancellation errors
   when backend operations fail.
 
-### Migration Notes
+#### Migration Notes
 
 - Detection now requires a binary HEVC signature; generic `mif1`/`msf1` containers
   without an explicit HEVC brand no longer count as confirmed HEIC.

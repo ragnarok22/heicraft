@@ -4,10 +4,32 @@ Thanks for helping improve `heicraft`.
 
 ## Development Setup
 
-Install dependencies:
+Work from a repository checkout, not the published npm package. The current `main` branch targets upcoming 0.3.0; see the [README's release notice](./README.md).
+
+Prerequisites:
+
+- **Node.js 26**, recommended by [`.nvmrc`](./.nvmrc). Node.js 22.13.0 or later on the 22.x line, 24.x, and 26.x are supported; use the latest patch release of your chosen line.
+- **pnpm 12.18.0**, pinned by `packageManager` in [`package.json`](./package.json).
+
+If you use [nvm](https://github.com/nvm-sh/nvm), select the repository's Node.js version from its root:
 
 ```sh
-pnpm install
+nvm install
+nvm use
+```
+
+If the pinned pnpm version is not already available, install it with npm:
+
+```sh
+npm install --global pnpm@12.18.0
+```
+
+Confirm your tools and install the locked dependencies:
+
+```sh
+node --version
+pnpm --version
+pnpm install --frozen-lockfile
 ```
 
 Run the main checks:
@@ -25,6 +47,22 @@ Before opening a pull request, also check the published package contents:
 ```sh
 pnpm run pack:check
 ```
+
+## Run the Browser Example
+
+After the development setup above, run these commands from the repository root:
+
+```sh
+pnpm run build
+pnpm exec vite build --config examples/vite.config.ts
+pnpm exec vite preview --config examples/vite.config.ts --host 127.0.0.1
+```
+
+Open `http://127.0.0.1:4173/browser.html`, or append `/browser.html` to the local URL printed by Vite if it chooses another port. Select a HEIC/HEIF image; [`tests/fixtures/pattern.heic`](./tests/fixtures/pattern.heic) is a small, redistributable fixture you can use.
+
+This builds [`examples/browser.html`](./examples/browser.html) against the local library's `dist` output, not npm's published 0.1.1. The example assets go to `examples/dist`, separate from the package build. Rebuild both the library and example after changing library code; restart the preview server if needed.
+
+Use the production build/preview commands, not a direct `file://` URL or `vite dev`. The current worker bundle is verified through Vite's production build; development-server dependency optimization is not currently supported by this example.
 
 ## Scope
 
