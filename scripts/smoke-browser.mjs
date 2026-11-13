@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +13,7 @@ const fixture = await readFile(new URL("../tests/fixtures/pattern.heic", import.
 const directory = await mkdtemp(join(tmpdir(), "heicraft-browser-"));
 let server;
 let browser;
+let conversionTimeout;
 
 try {
   await writeFile(
@@ -54,6 +55,7 @@ try {
       throw new Error(`Browser bundle ${script} includes ${match}.`);
     }
   }
+
   server = await preview({
     root: directory,
     configFile: false,
@@ -68,6 +70,30 @@ try {
   await page.goto(server.resolvedUrls.local[0]);
   await page.waitForFunction(() => typeof window.__heicraftConvertHeic === "function");
 
+  await Promise.race([
+    checkConversions(page),
+    new Promise((_, reject) => {
+      conversionTimeout = setTimeout(
+        () => reject(new Error("Real conversion smoke test timed out after 60 seconds.")),
+        60_000,
+      );
+    }),
+  ]);
+  assert.deepEqual(pageErrors, [], "Browser smoke test encountered uncaught page errors.");
+} finally {
+  clearTimeout(conversionTimeout);
+  try {
+    await browser?.close();
+  } finally {
+    try {
+      await server?.close();
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  }
+}
+
+async function checkConversions(page) {
   for (const format of ["jpeg", "png", "webp"]) {
     // Read Node/Sharp output with Chromium's native decoder, not Sharp again.
     const nodeResult = await convertHeic(fixture, { format, quality: 0.9 });
@@ -130,17 +156,6 @@ try {
       `Browser ${format}, decoded by Sharp`,
     );
     console.log(`Real ${format} conversion passed in Node.js and Chromium.`);
-  }
-  assert.deepEqual(pageErrors, [], "Browser smoke test encountered uncaught page errors.");
-} finally {
-  try {
-    await browser?.close();
-  } finally {
-    try {
-      await server?.close();
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
   }
 }
 
