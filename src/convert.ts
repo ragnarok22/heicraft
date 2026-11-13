@@ -1,4 +1,5 @@
-import { decodeHeic } from "./decoder";
+import { canEncodeOffscreen, assertBrowserOutputMimeType } from "./browser/encode";
+import { convertHeicInWorker, decodeHeic } from "./decoder";
 import { detectNormalizedHeic } from "./detect";
 import {
   AbortError,
@@ -13,7 +14,7 @@ import { isNodeEnvironment } from "./utils/environment";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 import { resolveMaxPixels } from "./utils/limits";
 import { assertOutputFormat, getOutputMimeType, normalizeQuality } from "./utils/mime";
-import { withDecodeAdmission } from "./workers/runtime";
+import { withOperationAdmission } from "./workers/runtime";
 
 export async function convertHeic(
   input: HeicInput,
@@ -27,19 +28,40 @@ export async function convertHeic(
   const maxPixels = resolveMaxPixels(options.maxPixels);
 
   const quality = options.quality ?? 0.92;
-  const decoded = await withDecodeAdmission(async () => {
+  return withOperationAdmission(async () => {
     const normalized = await normalizeInput(input, options);
     assertNonEmptyInput(normalized.bytes);
     throwIfAborted(options.signal);
 
-    const detection = detectNormalizedHeic(normalized);
+    const detection = await detectNormalizedHeic(normalized, options.signal);
     if (!detection.isHeic) {
       throw new InvalidInputError();
     }
     throwIfAborted(options.signal);
 
+    let decoded: DecodedImage;
     try {
-      return await decodeHeic(normalized.bytes, maxPixels, options.signal);
+      if (!isNodeEnvironment() && canEncodeOffscreen()) {
+        const result = await convertHeicInWorker(
+          normalized.bytes,
+          maxPixels,
+          format,
+          quality,
+          options.signal,
+        );
+        throwIfAborted(options.signal);
+        if (result instanceof Blob) {
+          return {
+            data: result,
+            format,
+            mimeType: getOutputMimeType(format),
+            filename: options.filename,
+          };
+        }
+        decoded = result;
+      } else {
+        decoded = await decodeHeic(normalized.bytes, maxPixels, options.signal);
+      }
     } catch (error) {
       throwIfAborted(options.signal);
       if (
@@ -55,33 +77,33 @@ export async function convertHeic(
         { cause: error },
       );
     }
-  }, options.signal);
-  throwIfAborted(options.signal);
-
-  const mimeType = getOutputMimeType(format);
-  let data: Blob | Uint8Array;
-  try {
-    data = isNodeEnvironment()
-      ? await encodeInNode(decoded, format, quality)
-      : await encodeInBrowser(decoded, format, quality, mimeType);
-  } catch (error) {
     throwIfAborted(options.signal);
-    if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
-      throw error;
-    }
-    throw new ConversionError(
-      error instanceof Error ? error.message : "Conversion failed while encoding image.",
-      { cause: error },
-    );
-  }
-  throwIfAborted(options.signal);
 
-  return {
-    data,
-    format,
-    mimeType,
-    filename: options.filename,
-  };
+    const mimeType = getOutputMimeType(format);
+    let data: Blob | Uint8Array;
+    try {
+      data = isNodeEnvironment()
+        ? await encodeInNode(decoded, format, quality)
+        : await encodeInBrowser(decoded, format, quality, mimeType);
+    } catch (error) {
+      throwIfAborted(options.signal);
+      if (error instanceof UnsupportedFormatError || error instanceof ConversionError) {
+        throw error;
+      }
+      throw new ConversionError(
+        error instanceof Error ? error.message : "Conversion failed while encoding image.",
+        { cause: error },
+      );
+    }
+    throwIfAborted(options.signal);
+
+    return {
+      data,
+      format,
+      mimeType,
+      filename: options.filename,
+    };
+  }, options.signal);
 }
 
 function assertQuality(quality?: number): void {
@@ -172,16 +194,4 @@ async function encodeInBrowser(
   assertBrowserOutputMimeType(blob, format, mimeType);
 
   return blob;
-}
-
-function assertBrowserOutputMimeType(blob: Blob, format: OutputFormat, mimeType: string): void {
-  if (!blob.type || blob.type === mimeType) {
-    return;
-  }
-
-  if (format === "webp") {
-    throw new UnsupportedFormatError("WebP output is not supported in this environment.");
-  }
-
-  throw new ConversionError(`Expected browser encoder to return ${mimeType}, got ${blob.type}.`);
 }

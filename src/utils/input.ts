@@ -148,10 +148,11 @@ async function withInputFile<T>(
     throw new InvalidInputError("Input file path must not be empty.");
   }
 
-  const { open } = await import("node:fs/promises");
+  const { open, constants } = await import("node:fs/promises");
   throwIfAborted(signal);
   try {
-    const file = await open(filePath, "r");
+    // A blocking open on a FIFO never reaches fstat() and cannot be cancelled.
+    const file = await open(filePath, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
     try {
       throwIfAborted(signal);
       const stats = await file.stat();

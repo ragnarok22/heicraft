@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Readable } from "node:stream";
+import { constants } from "node:fs/promises";
 import { AbortError, detectHeic } from "../src";
 import { normalizeInput } from "../src/utils/input";
 import { createFtypBytes } from "./helpers";
@@ -12,7 +13,10 @@ const file = vi.hoisted(() => ({
 }));
 const open = vi.hoisted(() => vi.fn());
 
-vi.mock("node:fs/promises", () => ({ open }));
+vi.mock("node:fs/promises", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs/promises")>()),
+  open,
+}));
 
 describe("bounded file input", () => {
   beforeEach(() => {
@@ -27,7 +31,10 @@ describe("bounded file input", () => {
     await expect(normalizeInput("photo.heic", { maxInputBytes: 4 })).rejects.toMatchObject({
       code: "RESOURCE_LIMIT_EXCEEDED",
     });
-    expect(open).toHaveBeenCalledExactlyOnceWith("photo.heic", "r");
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      "photo.heic",
+      constants.O_RDONLY | constants.O_NONBLOCK,
+    );
     expect(file.read).not.toHaveBeenCalled();
     expect(file.close).toHaveBeenCalledOnce();
   });
@@ -169,7 +176,10 @@ describe("bounded file input", () => {
     for (const [, , length, position] of file.read.mock.calls) {
       expect(position + length).toBeLessThanOrEqual(header.byteLength);
     }
-    expect(open).toHaveBeenCalledExactlyOnceWith("photo.heic", "r");
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      "photo.heic",
+      constants.O_RDONLY | constants.O_NONBLOCK,
+    );
     expect(file.close).toHaveBeenCalledOnce();
   });
 

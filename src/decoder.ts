@@ -1,4 +1,4 @@
-import type { DecodedImage } from "./types";
+import type { DecodedImage, OutputFormat } from "./types";
 import { resolveMaxPixels } from "./utils/limits";
 import type { HeicMetadata } from "./workers/protocol";
 import { getDecoderPool } from "./workers/runtime";
@@ -24,4 +24,17 @@ export async function readHeicMetadata(
     { operation: "metadata", bytes, maxPixels: resolveMaxPixels(maxPixels), inspectAlpha },
     signal,
   )) as HeicMetadata;
+}
+
+export async function convertHeicInWorker(
+  bytes: Uint8Array,
+  maxPixels: number,
+  format: OutputFormat,
+  quality: number,
+  signal?: AbortSignal,
+): Promise<Blob | DecodedImage> {
+  return (await getDecoderPool().run(
+    { operation: "convert", bytes, maxPixels, format, quality },
+    signal,
+  )) as Blob | DecodedImage;
 }

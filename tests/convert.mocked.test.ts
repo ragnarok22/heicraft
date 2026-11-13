@@ -46,6 +46,38 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it("holds admission until encoding completes and releases it after failure", async () => {
+    const calls = mockDecoderAndSharp(Buffer.from([1]));
+    let finish!: (error?: Error) => void;
+    let started!: () => void;
+    const encoding = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const output = new Promise<Buffer>((resolve, reject) => {
+      finish = (error) => (error ? reject(error) : resolve(Buffer.from([1])));
+    });
+    calls.toBuffer.mockImplementation(() => {
+      if (calls.toBuffer.mock.calls.length === 10) started();
+      return output;
+    });
+    const { convertHeic } = await import("../src/convert");
+    const pending = Array.from({ length: 10 }, () => convertHeic(createFtypBytes()));
+    const settled = Promise.allSettled(pending);
+    await encoding;
+    const excessInput = new CountingBlob([createFtypBytes()]);
+    const excess = convertHeic(excessInput);
+    const rejected = Promise.allSettled([excess]);
+    try {
+      expect(excessInput.reads).toBe(0);
+      await expect(excess).rejects.toMatchObject({ code: "RESOURCE_LIMIT_EXCEEDED" });
+    } finally {
+      finish(new Error("encoder failed"));
+      await Promise.all([settled, rejected]);
+    }
+    calls.toBuffer.mockResolvedValue(Buffer.from([1]));
+    await expect(convertHeic(createFtypBytes())).resolves.toBeDefined();
+  });
+
   it.each([
     ["Uint8Array", Uint8Array],
     ["Uint8ClampedArray", Uint8ClampedArray],

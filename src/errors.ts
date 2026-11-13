@@ -32,6 +32,9 @@ export class ConversionError extends HeicraftError {
   }
 }
 
+/** Internal distinction: infrastructure failures must never become partial metadata. */
+export class WorkerError extends ConversionError {}
+
 export class AbortError extends HeicraftError {
   constructor(message = "Conversion was aborted.", options?: ErrorOptions) {
     super(message, "ABORT_ERROR", options);

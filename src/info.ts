@@ -5,20 +5,21 @@ import {
   InvalidInputError,
   ResourceLimitError,
   UnsupportedFormatError,
+  WorkerError,
   throwIfAborted,
 } from "./errors";
 import type { HeicInfo, HeicInput, InfoOptions } from "./types";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 import { resolveMaxPixels } from "./utils/limits";
-import { withDecodeAdmission } from "./workers/runtime";
+import { withOperationAdmission } from "./workers/runtime";
 
 export async function getHeicInfo(input: HeicInput, options: InfoOptions = {}): Promise<HeicInfo> {
   throwIfAborted(options.signal);
   const maxPixels = resolveMaxPixels(options.maxPixels);
-  return withDecodeAdmission(async () => {
+  return withOperationAdmission(async () => {
     const normalized = await normalizeInput(input, options);
     assertNonEmptyInput(normalized.bytes);
-    const detection = detectNormalizedHeic(normalized);
+    const detection = await detectNormalizedHeic(normalized, options.signal);
 
     if (!detection.isHeic) {
       throw new InvalidInputError();
@@ -45,7 +46,8 @@ export async function getHeicInfo(input: HeicInput, options: InfoOptions = {}): 
       if (
         error instanceof AbortError ||
         error instanceof ResourceLimitError ||
-        error instanceof UnsupportedFormatError
+        error instanceof UnsupportedFormatError ||
+        error instanceof WorkerError
       ) {
         throw error;
       }

@@ -4,9 +4,16 @@ import { serializeError, type WorkerRequest, type WorkerResponse } from "./proto
 export async function executeRequest(request: WorkerRequest): Promise<WorkerResponse> {
   try {
     const result =
-      request.operation === "decode"
-        ? await decodeHeic(request.bytes, request.maxPixels)
-        : await readHeicMetadata(request.bytes, request.maxPixels, request.inspectAlpha);
+      request.operation === "metadata"
+        ? await readHeicMetadata(request.bytes, request.maxPixels, request.inspectAlpha)
+        : await decodeHeic(request.bytes, request.maxPixels);
+    if (request.operation === "convert" && "data" in result) {
+      return {
+        id: request.id,
+        ok: true,
+        result: await encodeOffscreen(result, request.format, request.quality),
+      };
+    }
     return { id: request.id, ok: true, result };
   } catch (error) {
     return { id: request.id, ok: false, error: serializeError(error) };
@@ -16,3 +23,4 @@ export async function executeRequest(request: WorkerRequest): Promise<WorkerResp
 export function responseTransfers(response: WorkerResponse): ArrayBuffer[] {
   return response.ok && "data" in response.result ? [response.result.data.buffer] : [];
 }
+import { encodeOffscreen } from "../browser/encode.ts";

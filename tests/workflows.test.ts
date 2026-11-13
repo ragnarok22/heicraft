@@ -38,7 +38,7 @@ describe("GitHub workflows", () => {
       engines: { node: string };
     };
     const workflow = await readFile(".github/workflows/ci.yml", "utf8");
-    const engineMinimumMajor = Number(/^>=(\d+)/.exec(packageJson.engines.node)?.[1]);
+    const engineMinimumMajor = Number(/^(?:>=|\^)(\d+)/.exec(packageJson.engines.node)?.[1]);
 
     expect(engineMinimumMajor).toBe(Math.min(...getCiNodeVersions(workflow)));
   });

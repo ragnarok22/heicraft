@@ -61,8 +61,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
       - name: Verify tag matches package version
-        run: |
-          node -e "const tagVersion = '${{ steps.version.outputs.VERSION }}'; const packageVersion = require('./package.json').version; if (tagVersion !== packageVersion) { throw new Error(`Tag version ${tagVersion} does not match package version ${packageVersion}`); }"
+        run: node scripts/check-release-version.mjs
 
       - name: Publish to npm with provenance
         run: npm publish --provenance --access public

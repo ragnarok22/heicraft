@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AbortError, ConversionError, ResourceLimitError } from "../src";
+import { WorkerError } from "../src/errors";
 import { DecoderPool, type DecoderWorker } from "../src/workers/pool";
 import type { WorkerRequest, WorkerResponse } from "../src/workers/protocol";
 
@@ -171,7 +172,7 @@ describe("bounded decoder workers", () => {
     const failing = pool.run(request);
     const cause = new Error("worker crashed");
     const assertion = expect(failing).rejects.toMatchObject({
-      name: "ConversionError",
+      name: "WorkerError",
       cause,
     });
     await crashed.posted.promise;
@@ -183,6 +184,47 @@ describe("bounded decoder workers", () => {
     await next;
     expect(posting.terminate).toHaveBeenCalledOnce();
     expect(crashed.terminate).toHaveBeenCalledOnce();
+  });
+
+  it("releases idle workers, cancels their idle timers on reuse, and recreates them", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = new TestWorker();
+      const second = new TestWorker();
+      const create = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+      const pool = new DecoderPool(create, 1, 1, 100);
+      const initial = pool.run(request);
+      await first.posted.promise;
+      first.complete();
+      await initial;
+      await vi.advanceTimersByTimeAsync(50);
+      const reused = pool.run(request);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(first.terminate).not.toHaveBeenCalled();
+      first.complete();
+      await reused;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(first.terminate).toHaveBeenCalledOnce();
+      const replacement = pool.run(request);
+      await second.posted.promise;
+      second.complete();
+      await replacement;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(second.terminate).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("classifies creation failures as worker errors, not image parsing failures", async () => {
+    const cause = new Error("Missing worker asset");
+    const pool = new DecoderPool(async () => {
+      throw cause;
+    }, 1, 1);
+    const result = pool.run(request);
+    await expect(result).rejects.toBeInstanceOf(WorkerError);
+    await expect(result).rejects.toBeInstanceOf(ConversionError);
+    await expect(result).rejects.toMatchObject({ cause });
   });
 
   it("rehydrates typed errors without discarding a healthy worker", async () => {

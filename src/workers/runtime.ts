@@ -12,8 +12,8 @@ export function getDecoderPool(): DecoderPool {
   return pool;
 }
 
-/** Bound pending inputs before reading files or allocating an internal transfer buffer. */
-export async function withDecodeAdmission<T>(
+/** Bound complete operations, including the input, decoded pixels, and output encoder. */
+export async function withOperationAdmission<T>(
   task: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {

@@ -6,16 +6,18 @@ import {
   ResourceLimitError,
   UnsupportedFormatError,
 } from "../errors.ts";
-import type { DecodedImage, HeicInfo } from "../types";
+import type { DecodedImage, HeicInfo, OutputFormat } from "../types";
 
 export type HeicMetadata = Pick<HeicInfo, "width" | "height" | "imagesCount" | "hasAlpha">;
-export type WorkerResult = DecodedImage | HeicMetadata;
+export type WorkerResult = DecodedImage | HeicMetadata | Blob;
 export type DecodeRequest = {
-  operation: "decode" | "metadata";
   bytes: Uint8Array;
   maxPixels?: number;
-  inspectAlpha?: boolean;
-};
+} & (
+  | { operation: "decode" }
+  | { operation: "metadata"; inspectAlpha?: boolean }
+  | { operation: "convert"; format: OutputFormat; quality: number }
+);
 export type WorkerRequest = DecodeRequest & { id: number };
 type SerializedCause = {
   name: string;

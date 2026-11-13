@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AbortError, getHeicInfo, InvalidInputError, ResourceLimitError } from "../src";
 import { readHeicMetadata } from "../src/decoder";
+import { WorkerError } from "../src/errors";
 import { CountingBlob, createFtypBytes } from "./helpers";
 
 vi.mock("../src/decoder", () => ({
@@ -100,6 +101,14 @@ describe("getHeicInfo", () => {
       mimeType: "image/heic",
       brand: "heic",
     });
+  });
+
+  it("does not hide worker startup or transport failures as partial metadata", async () => {
+    const failure = new WorkerError("Worker asset is missing.", {
+      cause: new Error("Cannot find module"),
+    });
+    metadataMock.mockRejectedValue(failure);
+    await expect(getHeicInfo(createFtypBytes())).rejects.toBe(failure);
   });
 
   it("propagates cancellation instead of returning partial metadata", async () => {

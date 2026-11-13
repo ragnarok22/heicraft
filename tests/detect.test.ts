@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { detectHeic, isHeic, ResourceLimitError } from "../src";
+import { AbortError, convertHeic, detectHeic, getHeicInfo, isHeic, ResourceLimitError } from "../src";
 import { CountingBlob, createFtypBytes } from "./helpers";
 
 describe("detectHeic", () => {
@@ -28,6 +28,33 @@ describe("detectHeic", () => {
     expect(blob.reads).toBe(0);
     expect(blob.bytesRead).toBe(header.byteLength);
   });
+
+  it("stops reading compatible brands once AV1 determines the result", async () => {
+    const bytes = new Uint8Array(1024 * 1024);
+    new DataView(bytes.buffer).setUint32(0, bytes.byteLength);
+    bytes.set(createFtypBytes("avif").subarray(4), 4);
+    const blob = new CountingBlob([bytes]);
+    await expect(detectHeic(blob)).resolves.toMatchObject({ codec: "av1", isHeic: false });
+    expect(blob.bytesRead).toBe(16);
+  });
+
+  it.each([detectHeic, isHeic, convertHeic, getHeicInfo])(
+    "allows timer-driven cancellation while scanning large in-memory ftyp boxes (%s)",
+    async (inspect) => {
+      const bytes = new Uint8Array(2 * 1024 * 1024);
+      new DataView(bytes.buffer).setUint32(0, bytes.byteLength);
+      bytes.set(createFtypBytes("heic").subarray(4), 4);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 0);
+      try {
+        await expect(inspect(bytes, { signal: controller.signal })).rejects.toBeInstanceOf(
+          AbortError,
+        );
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  );
 
   it.each([false, true])(
     "scans late compatible brands in bounded chunks (size zero: %s)",

@@ -6,6 +6,17 @@ import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from 
 const hevcBrands = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis"]);
 const heifBrands = new Set(["mif1", "msf1"]);
 const av1Brands = new Set(["avif", "avis"]);
+const brandCodes = new Map(
+  [...hevcBrands, ...heifBrands, ...av1Brands].map((brand) => [
+    brand.charCodeAt(0) * 0x1000000 +
+      brand.charCodeAt(1) * 0x10000 +
+      brand.charCodeAt(2) * 0x100 +
+      brand.charCodeAt(3),
+    brand,
+  ]),
+);
+const CHUNK_BYTES = 64 * 1024;
+const YIELD_BYTES = 256 * 1024;
 
 export async function isHeic(input: HeicInput, options: InputOptions = {}): Promise<boolean> {
   try {
@@ -22,12 +33,24 @@ export async function detectHeic(
   options: InputOptions = {},
 ): Promise<HeicDetectionResult> {
   return withInputReader(input, options, async (reader) =>
-    createDetectionResult(await readHeifBrand(reader), reader),
+    createDetectionResult(await readHeifBrand(reader, options.signal), reader),
   );
 }
 
-export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetectionResult {
-  return createDetectionResult(detectHeifBrand(normalized.bytes), normalized);
+export async function detectNormalizedHeic(
+  normalized: NormalizedInput,
+  signal?: AbortSignal,
+): Promise<HeicDetectionResult> {
+  return createDetectionResult(
+    await readHeifBrand(
+      {
+        size: normalized.bytes.byteLength,
+        read: async (start, end) => normalized.bytes.subarray(start, end),
+      },
+      signal,
+    ),
+    normalized,
+  );
 }
 
 function createDetectionResult(
@@ -49,20 +72,11 @@ function createDetectionResult(
   };
 }
 
-export function detectHeifBrand(bytes: Uint8Array): string | undefined {
-  const box = readFtypBox(bytes, bytes.byteLength);
-  if (!box) {
-    return undefined;
-  }
-
-  let brand = preferredBrand(undefined, readAscii(bytes, box.headerSize, box.headerSize + 4));
-  for (let offset = box.headerSize + 8; offset < box.end; offset += 4) {
-    brand = preferredBrand(brand, readAscii(bytes, offset, offset + 4));
-  }
-  return brand;
-}
-
-async function readHeifBrand(reader: InputReader): Promise<string | undefined> {
+async function readHeifBrand(
+  reader: InputReader,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  throwIfAborted(signal);
   const header = await reader.read(0, Math.min(16, reader.size));
   const box = readFtypBox(header, reader.size);
   if (!box) {
@@ -74,17 +88,29 @@ async function readHeifBrand(reader: InputReader): Promise<string | undefined> {
     return undefined;
   }
   let brand = preferredBrand(undefined, readAscii(major, 0, 4));
+  if (brand && av1Brands.has(brand)) return brand;
 
-  // Every compatible brand matters: an AV1 brand may occur after a HEVC brand.
-  // Scan large (including size-zero) boxes in bounded, four-byte-aligned chunks.
-  for (let offset = box.headerSize + 8; offset < box.end; offset += 64 * 1024) {
-    const end = Math.min(offset + 64 * 1024, box.end);
+  // HEVC cannot short-circuit: a later AV1 brand takes precedence.
+  const start = box.headerSize + 8;
+  for (let offset = start; offset < box.end; offset += CHUNK_BYTES) {
+    if (offset > start && (offset - start) % YIELD_BYTES === 0) {
+      // Awaiting already-resolved reads only yields to microtasks, starving timers
+      // and user-triggered cancellation. Give the event loop an actual turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    throwIfAborted(signal);
+    const end = Math.min(offset + CHUNK_BYTES, box.end);
     const bytes = await reader.read(offset, end);
+    throwIfAborted(signal);
     if (bytes.byteLength !== end - offset) {
       return undefined;
     }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     for (let index = 0; index < bytes.byteLength; index += 4) {
-      brand = preferredBrand(brand, readAscii(bytes, index, index + 4));
+      const candidate = brandCodes.get(view.getUint32(index));
+      if (!candidate) continue;
+      brand = preferredBrand(brand, candidate);
+      if (av1Brands.has(brand)) return brand;
     }
   }
   return brand;

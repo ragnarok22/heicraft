@@ -1,4 +1,10 @@
-import { AbortError, ConversionError, ResourceLimitError, throwIfAborted } from "../errors";
+import {
+  AbortError,
+  ResourceLimitError,
+  UnsupportedFormatError,
+  WorkerError,
+  throwIfAborted,
+} from "../errors";
 import {
   type DecodeRequest,
   deserializeError,
@@ -32,6 +38,7 @@ type Slot = {
   retiring: boolean;
   cleanup?: () => void;
   retirement?: Promise<void>;
+  idleTimer?: ReturnType<typeof setTimeout>;
 };
 
 /** One job per worker, so terminating an active job never cancels a neighbour. */
@@ -44,6 +51,7 @@ export class DecoderPool {
     private readonly createWorker: () => Promise<DecoderWorker>,
     private readonly maxWorkers: number,
     private readonly maxQueue: number,
+    private readonly idleTimeoutMs = 30_000,
   ) {}
 
   run(request: DecodeRequest, signal?: AbortSignal): Promise<WorkerResult> {
@@ -88,6 +96,8 @@ export class DecoderPool {
       }
       const job = this.queue.shift();
       if (!job) return;
+      clearTimeout(slot.idleTimer);
+      slot.idleTimer = undefined;
       slot.job = job;
       void this.start(slot, job);
     }
@@ -100,7 +110,7 @@ export class DecoderPool {
         slot.worker = worker;
         slot.cleanup = worker.listen(
           (response) => this.receive(slot, response),
-          (error) => this.retire(slot, new ConversionError(error.message, { cause: error })),
+          (error) => this.retire(slot, new WorkerError(error.message, { cause: error })),
         );
       }
       // An abort during asynchronous worker creation still has to terminate that worker.
@@ -111,7 +121,15 @@ export class DecoderPool {
       const bytes = new Uint8Array(job.request.bytes);
       slot.worker.postMessage({ ...job.request, bytes, id: job.id }, [bytes.buffer]);
     } catch (error) {
-      this.retire(slot, error);
+      this.retire(
+        slot,
+        error instanceof AbortError || error instanceof UnsupportedFormatError
+          ? error
+          : new WorkerError(
+              error instanceof Error ? error.message : "HEIC decoder worker failed.",
+              { cause: error },
+            ),
+      );
     } finally {
       if (slot.retiring) await this.finishRetirement(slot);
     }
@@ -127,11 +145,17 @@ export class DecoderPool {
     else if (response.ok) job.resolve(response.result);
     else job.reject(deserializeError(response.error));
     this.dispatch();
+    if (!slot.job && !slot.retiring) {
+      slot.idleTimer = setTimeout(() => this.retire(slot), this.idleTimeoutMs);
+      if (typeof slot.idleTimer === "object") slot.idleTimer.unref?.();
+    }
   }
 
-  private retire(slot: Slot, error: unknown): void {
+  private retire(slot: Slot, error?: unknown): void {
     if (slot.retiring) return;
     slot.retiring = true;
+    clearTimeout(slot.idleTimer);
+    slot.idleTimer = undefined;
     const job = slot.job;
     slot.job = undefined;
     job?.cleanup();
