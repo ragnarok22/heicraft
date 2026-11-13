@@ -44,7 +44,10 @@ jobs:
       - name: Smoke test package exports
         run: pnpm run smoke:dist
 
-      - name: Smoke test browser bundle
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Smoke test real Node and browser conversions
         run: pnpm run smoke:browser
 
       - name: Check package contents

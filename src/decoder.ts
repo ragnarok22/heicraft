@@ -1,10 +1,10 @@
-import type { HeifImage } from "libheif-js/wasm-bundle";
+import type { HeifImage } from "libheif-js/wasm-bundle.js";
 import type { DecodedImage } from "./types";
 import { assertPixelCount, resolveMaxPixels } from "./utils/limits";
 
 export async function decodeHeic(bytes: Uint8Array, maxPixels?: number): Promise<DecodedImage> {
   const pixelLimit = resolveMaxPixels(maxPixels);
-  const { default: libheif } = await import("libheif-js/wasm-bundle");
+  const { default: libheif } = await import("libheif-js/wasm-bundle.js");
   await libheif.ready;
 
   const decoder = new libheif.HeifDecoder();

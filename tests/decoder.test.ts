@@ -1,4 +1,4 @@
-import type { HeifImage } from "libheif-js/wasm-bundle";
+import type { HeifImage } from "libheif-js/wasm-bundle.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeHeic } from "../src/decoder";
 
@@ -7,7 +7,7 @@ const backend = vi.hoisted(() => ({
   freeContext: vi.fn(),
 }));
 
-vi.mock("libheif-js/wasm-bundle", () => ({
+vi.mock("libheif-js/wasm-bundle.js", () => ({
   default: {
     HeifDecoder: class {
       decoder: number | null = 42;

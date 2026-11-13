@@ -5,6 +5,41 @@ import { convertHeic, detectHeic, getHeicInfo, ResourceLimitError } from "../src
 
 const fixture = await readFile(new URL("./fixtures/pattern.heic", import.meta.url));
 
+describe("real HEIC conversion", () => {
+  it.each(["jpeg", "png", "webp"] as const)("encodes a readable %s image", async (format) => {
+    const input = Buffer.from(fixture);
+    const result = await convertHeic(input, { format, quality: 0.9 });
+
+    expect(result.format).toBe(format);
+    expect(result.mimeType).toBe(`image/${format}`);
+    expect(result.data).toBeInstanceOf(Uint8Array);
+    if (!(result.data instanceof Uint8Array)) {
+      throw new Error("Expected Node.js conversion to return Uint8Array data.");
+    }
+    const image = sharp(result.data);
+    await expect(image.metadata()).resolves.toMatchObject({ format, width: 32, height: 32 });
+
+    // Force a full decode: metadata alone also succeeds for some truncated images.
+    const { data, info } = await image.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    expect(info).toMatchObject({ width: 32, height: 32, channels: 4 });
+    expect(data.byteLength).toBe(32 * 32 * 4);
+    for (const y of [8, 24]) {
+      for (const x of [8, 24]) {
+        const offset = (y * 32 + x) * 4;
+        const expected = [x < 16 ? 220 : 40, y < 16 ? 180 : 60, 100];
+        for (let channel = 0; channel < 3; channel++) {
+          expect(
+            Math.abs(data[offset + channel] - expected[channel]),
+            `${format} pixel (${x}, ${y}), channel ${channel}`,
+          ).toBeLessThanOrEqual(12);
+        }
+        expect(data[offset + 3]).toBe(255);
+      }
+    }
+    expect(input).toEqual(fixture);
+  });
+});
+
 describe("real HEIC decoding", () => {
   it.each([
     ["conversion", convertHeic],
