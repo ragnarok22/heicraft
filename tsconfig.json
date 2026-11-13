@@ -12,7 +12,6 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "paths": {
       "heicraft": ["./src/index.ts"]
     },
