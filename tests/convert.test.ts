@@ -51,6 +51,19 @@ describe("convertHeic", () => {
     await expect(convertHeic(new Uint8Array([1, 2, 3]))).rejects.toBeInstanceOf(InvalidInputError);
   });
 
+  it.each([
+    ["JPEG", new Uint8Array([0xff, 0xd8, 0xff, 0xe0])],
+    ["generic HEIF", createFtypBytes("mif1")],
+    ["AVIF", createFtypBytes("avif", ["mif1"])],
+  ])("rejects %s with misleading HEIC metadata before decoding", async (_label, bytes) => {
+    const decode = vi.fn();
+    vi.doMock("heic-decode", () => ({ default: decode }));
+    const file = new File([bytes], "photo.heic", { type: "image/heic" });
+
+    await expect(convertHeic(file)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(decode).not.toHaveBeenCalled();
+  });
+
   it("wraps decoder failures in ConversionError", async () => {
     mockDecoderFailure();
 

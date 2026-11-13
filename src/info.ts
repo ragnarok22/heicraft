@@ -1,6 +1,6 @@
-import { ConversionError, InvalidInputError } from "./errors";
 import { decodeHeic } from "./decoder";
 import { detectNormalizedHeic } from "./detect";
+import { InvalidInputError } from "./errors";
 import type { HeicInfo, HeicInput } from "./types";
 import { assertNonEmptyInput, normalizeInput } from "./utils/input";
 
@@ -23,12 +23,10 @@ export async function getHeicInfo(input: HeicInput): Promise<HeicInfo> {
     info.width = decoded.width;
     info.height = decoded.height;
     info.hasAlpha = hasAlphaChannel(decoded.data);
-  } catch (error) {
-    if (detection.brand) {
-      return info;
-    }
-
-    throw new ConversionError(error instanceof Error ? error.message : undefined);
+  } catch {
+    // Detection now requires a binary signature, so its metadata remains useful
+    // even when the image payload cannot be decoded.
+    return info;
   }
 
   return info;

@@ -113,13 +113,15 @@ Behavior:
 
 ### `isHeic(input)`
 
-Return `true` or `false` if the input appears to be HEIC/HEIF.
+Return `true` only when the binary signature identifies HEVC-based HEIC/HEIF.
 
 ```ts
 const ok = await isHeic(file);
 ```
 
-Detection inspects the ISO BMFF `ftyp` box when possible and recognizes brands such as `heic`, `heix`, `hevc`, `hevx`, `heim`, `heis`, `mif1`, and `msf1`.
+Detection inspects the ISO BMFF `ftyp` box and requires a HEVC-specific brand such as `heic`, `heix`, `hevc`, `hevx`, `heim`, or `heis`. Generic HEIF container brands (`mif1`, `msf1`) alone do not identify the codec and return `false`. AV1 brands (`avif`, `avis`) return `false`, even alongside generic HEIF or HEVC brands.
+
+Filename extensions and MIME types are hints only: empty files or JPEGs renamed to `.heic` return `false`. Conversion and metadata inspection use the same signature requirement. Detection does not decode the image or guarantee successful conversion; corrupt payloads and unsupported codec profiles may still fail in the decoder.
 
 ### `detectHeic(input)`
 
@@ -128,11 +130,15 @@ Return detailed HEIC/HEIF detection information.
 ```ts
 type HeicDetectionResult = {
   isHeic: boolean;
+  isHeif: boolean;
+  codec?: "hevc" | "av1";
   brand?: string;
   mimeType?: "image/heic" | "image/heif";
   extension?: "heic" | "heif";
 };
 ```
+
+`isHeif` identifies the container independently of the codec, including AVIF. `codec` and `brand` come from the binary signature, with AV1 taking precedence over HEVC and HEVC over generic HEIF brands. `mimeType` is signature-derived and is undefined for AVIF or unrecognized data. `extension` is only a filename/MIME hint and may be present even when `isHeic` and `isHeif` are both `false`.
 
 Example:
 

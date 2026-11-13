@@ -2,7 +2,9 @@ import type { HeicDetectionResult, HeicInput, NormalizedInput } from "./types";
 import { normalizeInput } from "./utils/input";
 import { getHeicExtension, getHeicExtensionFromMimeType, getHeicMimeType } from "./utils/mime";
 
-const heifBrands = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"]);
+const hevcBrands = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis"]);
+const heifBrands = new Set(["mif1", "msf1"]);
+const av1Brands = new Set(["avif", "avis"]);
 
 export async function isHeic(input: HeicInput): Promise<boolean> {
   try {
@@ -20,19 +22,17 @@ export async function detectHeic(input: HeicInput): Promise<HeicDetectionResult>
 
 export function detectNormalizedHeic(normalized: NormalizedInput): HeicDetectionResult {
   const brand = detectHeifBrand(normalized.bytes);
+  const codec =
+    brand && av1Brands.has(brand) ? "av1" : brand && hevcBrands.has(brand) ? "hevc" : undefined;
   const extension =
     getHeicExtension(normalized.filename) ?? getHeicExtensionFromMimeType(normalized.mimeType);
-  const mimeType = getHeicMimeType(brand, extension);
 
   return {
-    isHeic: Boolean(
-      brand ||
-        extension ||
-        normalized.mimeType === "image/heic" ||
-        normalized.mimeType === "image/heif",
-    ),
+    isHeic: codec === "hevc",
+    isHeif: brand !== undefined,
+    codec,
     brand,
-    mimeType,
+    mimeType: getHeicMimeType(brand),
     extension,
   };
 }
@@ -64,13 +64,23 @@ export function detectHeifBrand(bytes: Uint8Array): string | undefined {
     boxEnd = size32;
   }
 
+  if ((boxEnd - headerSize - 8) % 4 !== 0) {
+    return undefined;
+  }
+
   const brands: string[] = [readAscii(bytes, headerSize, headerSize + 4)];
 
   for (let offset = headerSize + 8; offset + 4 <= boxEnd; offset += 4) {
     brands.push(readAscii(bytes, offset, offset + 4));
   }
 
-  return brands.find((brand) => heifBrands.has(brand));
+  // A generic HEIF container brand does not identify its codec. Prefer explicit
+  // codec brands, rejecting AV1 even when HEVC or metadata hints are also present.
+  return (
+    brands.find((brand) => av1Brands.has(brand)) ??
+    brands.find((brand) => hevcBrands.has(brand)) ??
+    brands.find((brand) => heifBrands.has(brand))
+  );
 }
 
 function readUint32(bytes: Uint8Array, offset: number): number {

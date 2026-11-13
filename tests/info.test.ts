@@ -1,6 +1,6 @@
 import decode from "heic-decode";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ConversionError, getHeicInfo, InvalidInputError } from "../src";
+import { getHeicInfo, InvalidInputError } from "../src";
 import { CountingBlob, createFtypBytes } from "./helpers";
 
 vi.mock("heic-decode", () => ({
@@ -59,26 +59,26 @@ describe("getHeicInfo", () => {
   it("returns detection metadata when signature-detected decoding fails", async () => {
     decodeMock.mockRejectedValue(new Error("decode failed"));
 
-    await expect(getHeicInfo(createFtypBytes("mif1"))).resolves.toEqual({
-      mimeType: "image/heif",
-      brand: "mif1",
+    await expect(getHeicInfo(createFtypBytes("heic"))).resolves.toEqual({
+      mimeType: "image/heic",
+      brand: "heic",
     });
   });
 
-  it("wraps decoder failures for extension-only fallback inputs", async () => {
-    decodeMock.mockRejectedValue(new Error("decode failed"));
+  it("rejects extension-only inputs without invoking the decoder", async () => {
     const file = new File([new Uint8Array([1, 2, 3])], "photo.heic", { type: "image/heic" });
 
-    await expect(getHeicInfo(file)).rejects.toBeInstanceOf(ConversionError);
+    await expect(getHeicInfo(file)).rejects.toBeInstanceOf(InvalidInputError);
+    expect(decodeMock).not.toHaveBeenCalled();
   });
 
-  it("uses a fallback message for non-Error extension-only decoder failures", async () => {
-    decodeMock.mockRejectedValue("decode failed");
-    const file = new File([new Uint8Array([1, 2, 3])], "photo.heic", { type: "image/heic" });
-
-    await expect(getHeicInfo(file)).rejects.toMatchObject({
-      code: "CONVERSION_ERROR",
-      message: "Conversion failed while decoding HEIC image.",
-    });
+  it.each([
+    ["mif1", []],
+    ["avif", ["mif1"]],
+  ] as const)("rejects unconfirmed or unsupported codecs (%s)", async (brand, compatibleBrands) => {
+    await expect(getHeicInfo(createFtypBytes(brand, [...compatibleBrands]))).rejects.toBeInstanceOf(
+      InvalidInputError,
+    );
+    expect(decodeMock).not.toHaveBeenCalled();
   });
 });
