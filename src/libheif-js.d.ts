@@ -2,7 +2,7 @@ declare module "libheif-js/wasm-bundle" {
   export type HeifImageData = {
     width: number;
     height: number;
-    data: Uint8ClampedArray;
+    data: Uint8ClampedArray<ArrayBuffer>;
   };
 
   export type HeifImage = {

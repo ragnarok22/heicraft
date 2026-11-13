@@ -96,7 +96,8 @@ async function encodeInNode(
   try {
     const sharpModule = await import("sharp");
     const sharp = sharpModule.default;
-    const image = sharp(Buffer.from(decoded.data), {
+    const { buffer, byteOffset, byteLength } = decoded.data;
+    const image = sharp(Buffer.from(buffer, byteOffset, byteLength), {
       raw: {
         width: decoded.width,
         height: decoded.height,
@@ -141,8 +142,9 @@ async function encodeInBrowser(
     throw new ConversionError("Conversion failed while creating a canvas context.");
   }
 
+  const { buffer, byteOffset, byteLength } = decoded.data;
   const imageData = new ImageData(
-    new Uint8ClampedArray(decoded.data),
+    new Uint8ClampedArray(buffer, byteOffset, byteLength),
     decoded.width,
     decoded.height,
   );

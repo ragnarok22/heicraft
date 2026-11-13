@@ -46,6 +46,25 @@ describe("convertHeic with mocked backends", () => {
     });
   });
 
+  it.each([
+    ["Uint8Array", Uint8Array],
+    ["Uint8ClampedArray", Uint8ClampedArray],
+  ] as const)("shares the decoded %s pixel range with Sharp", async (_name, ArrayType) => {
+    const data = new ArrayType([9, 255, 0, 0, 255, 8]).subarray(1, 5);
+    const calls = mockDecoderAndSharp(Buffer.from([1, 2, 3]));
+    const { convertHeic } = await import("../src/convert");
+    const { decodeHeic } = await import("../src/decoder");
+    vi.mocked(decodeHeic).mockResolvedValueOnce({ ...decodedImage, data });
+
+    await convertHeic(createFtypBytes("heic"));
+
+    const [pixels] = calls.sharp.mock.calls[0];
+    expect(pixels.buffer).toBe(data.buffer);
+    expect(pixels.byteOffset).toBe(data.byteOffset);
+    expect(pixels.byteLength).toBe(data.byteLength);
+    expect([...pixels]).toEqual([255, 0, 0, 255]);
+  });
+
   it("converts to PNG in Node.js", async () => {
     const calls = mockDecoderAndSharp(Buffer.from([4, 5, 6]));
     const { convertHeic } = await import("../src/convert");
@@ -142,6 +161,30 @@ describe("convertHeic with mocked backends", () => {
 
     expect(result.data).toBe(blob);
     expect(result.mimeType).toBe("image/jpeg");
+  });
+
+  it.each([
+    ["Uint8Array", Uint8Array],
+    ["Uint8ClampedArray", Uint8ClampedArray],
+  ] as const)("shares the decoded %s pixel range with ImageData", async (_name, ArrayType) => {
+    const data = new ArrayType([9, 255, 0, 0, 255, 8]).subarray(1, 5);
+    mockBrowserEnvironment();
+    mockDecoderAndSharp(Buffer.from([]));
+    const { convertHeic } = await importBrowserConvert();
+    const { decodeHeic } = await import("../src/decoder");
+    vi.mocked(decodeHeic).mockResolvedValueOnce({ ...decodedImage, data });
+    const putImageData = vi.fn<CanvasRenderingContext2D["putImageData"]>();
+    mockCanvas({ context: { putImageData } });
+
+    await convertHeic(createFtypBytes("heic"));
+
+    const [imageData, x, y] = putImageData.mock.calls[0];
+    expect(imageData.data).toBeInstanceOf(Uint8ClampedArray);
+    expect(imageData.data.buffer).toBe(data.buffer);
+    expect(imageData.data.byteOffset).toBe(data.byteOffset);
+    expect(imageData.data.byteLength).toBe(data.byteLength);
+    expect([...imageData.data]).toEqual([255, 0, 0, 255]);
+    expect([imageData.width, imageData.height, x, y]).toEqual([1, 1, 0, 0]);
   });
 
   it("rejects oversized browser input before reading or creating a canvas", async () => {

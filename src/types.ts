@@ -62,5 +62,5 @@ export type NormalizedInput = {
 export type DecodedImage = {
   width: number;
   height: number;
-  data: Uint8ClampedArray | Uint8Array;
+  data: Uint8ClampedArray<ArrayBuffer> | Uint8Array<ArrayBuffer>;
 };
