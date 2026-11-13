@@ -1,28 +1,75 @@
 # Security Policy
 
+This policy covers private vulnerability reporting and the security boundaries of processing HEIC/HEIF images with heicraft. Usage and option details belong in the [README](./README.md).
+
 ## Supported Versions
 
-Security fixes are handled for the latest published version of `heicraft`.
+Security fixes target the **latest published version** of `heicraft`. Backports to older versions are not guaranteed.
+
+When possible, check whether an issue still affects the latest release, but do not delay a report if you cannot safely verify it.
 
 ## Reporting a Vulnerability
 
-Please report security issues privately through GitHub Security Advisories if available for the repository. If advisories are not available, contact the project maintainer privately before opening a public issue.
+Use GitHub's private reporting channel:
 
-Include:
+**[Report a vulnerability](https://github.com/ragnarok22/heicraft/security/advisories/new)**
 
-- A clear description of the issue.
-- Steps to reproduce, if safe to share.
-- Affected versions.
-- Any known workaround.
+You must sign in to GitHub. If the reporting form is unavailable, a repository administrator needs to [enable private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/working-with-repository-security-advisories/configuring-private-vulnerability-reporting-for-a-repository). Do not use a public issue as a fallback for vulnerability details or exploit files.
 
-Do not include malicious files or exploit payloads in public issues.
+Include enough information to investigate:
+
+- Affected heicraft version and, if known, relevant dependency versions.
+- Node.js or browser version, operating system, and bundler/deployment details.
+- A description of the issue, expected behavior, and observed impact.
+- Minimal reproduction steps or code, including resource-limit and cancellation options.
+- A small reproduction file, only if it is safe and permitted to share privately.
+- Any known mitigation or workaround.
+
+Remove personal images, location/EXIF data, credentials, and unrelated application data from reproductions. Keep potentially malicious samples in the private report; do not upload them to public issues or pull requests.
+
+Ordinary bugs and feature requests without security-sensitive information can use [GitHub issues](https://github.com/ragnarok22/heicraft/issues).
+
+## Coordinated Disclosure
+
+Please keep vulnerability details private while they are assessed and coordinate public disclosure with the maintainers. Investigation or fixes may depend on upstream decoder and encoder projects.
+
+No fixed acknowledgement or resolution time is guaranteed. Do not interpret the absence of published advisories as evidence that the library or its dependencies are vulnerability-free.
+
+## Handling Untrusted Images
+
+Image parsing, decompression, and encoding are resource-intensive operations over attacker-controlled data. Treat uploaded images as untrusted even if their filename, MIME type, or detected signature looks correct.
+
+### What the Library Limits
+
+- The default input-size limit is **20 MiB** for all public entry points.
+- Conversion and metadata inspection default to **25 million pixels** for the image being inspected. Dimensions are checked before allocating output RGBA or rendering pixels.
+- Decoder work has bounded admission and queue sizes per loaded library instance.
+- `AbortSignal` can cancel input reading, queued decoding, or an active decoder worker.
+
+See [Resource Limits](./README.md#resource-limits) and [Workers and Cancellation](./README.md#workers-and-cancellation) for exact API behavior.
+
+### What Those Limits Do Not Guarantee
+
+- A signature check is not full container or payload validation, and does not establish that an image is safe to decode.
+- Byte and pixel limits are **not total memory, CPU, or execution-time budgets**. The backend parses compressed data before dimensions can be checked, and parsing, decoding, and encoding can allocate additional memory.
+- Metadata inspection still loads the complete compressed input. Opt-in transparency inspection may also decode pixels.
+- Worker-based decoding improves responsiveness and cancellation; it is **not a security sandbox**. In particular, Node.js worker threads share a process.
+- Internal decoder limits are not process-wide request or encoding-concurrency limits.
+- Cancellation does not interrupt an already-running Sharp or canvas encoder. A rejected or cancelled call is not a hard execution deadline.
+
+### Application Responsibilities
+
+- Set upload-size limits before buffering request bodies. Limits on an already allocated `Buffer` cannot reclaim that allocation.
+- Choose `maxInputBytes` and `maxPixels` for your workload. Raising them increases resource exposure.
+- Bound concurrent requests and conversions at the application level, including output encoding.
+- For hostile workloads, use an appropriately restricted process or container with external memory/CPU limits and enforceable deadlines.
+- Run with least privilege. If accepting filesystem paths, authorize them in your application; heicraft is not a path-access policy layer.
+- Keep private images and reproduction samples out of public logs and error reports.
 
 ## Dependency Security
 
-`heicraft` relies on third-party decoding and image-processing dependencies. Keep dependencies updated and review their advisories before deploying in production.
+HEIC decoding uses `libheif-js`/libheif WebAssembly. Node.js output encoding uses `sharp` and its native dependency stack; browser output encoding uses the platform canvas API.
 
-## Untrusted Inputs
+Keep resolved dependencies and the host runtime updated, review upstream advisories, and test upgrades against your workload. A heicraft version alone does not identify every transitive or platform-specific binary in your deployment.
 
-Input size is limited to 20 MiB by default. Conversion and metadata inspection are also limited to 25 million pixels, checked before allocating RGBA or rendering. Configure `maxInputBytes` and `maxPixels` per call to match your workload; increasing them increases resource exposure.
-
-These are not total memory or execution-time limits. Native parsing/decoding and output encoding require additional resources. Use process/worker isolation and concurrency limits for hostile inputs. See the README's resource-limit documentation for API behavior.
+See [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) for upstream projects and licensing references. Report vulnerabilities affecting heicraft's integration privately even when a dependency may be involved.

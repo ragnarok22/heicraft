@@ -29,7 +29,7 @@ pnpm run pack:check
 
 ## Scope
 
-Keep the MVP focused. Avoid adding CLI support, batch conversion, Web Workers, React hooks, advanced resizing, EXIF editing, streaming, or multi-image extraction unless the roadmap explicitly moves those features into scope.
+Keep changes focused on the current library. Worker-based decoding is already part of the implementation. See [ROADMAP.md](./ROADMAP.md) for current capabilities and proposed CLI, batch, and longer-term work; a roadmap entry is not implementation approval. Discuss substantial API or scope changes in an issue before starting.
 
 ## Tests
 
